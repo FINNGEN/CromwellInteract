@@ -23,7 +23,7 @@ def get_metadata(workflowID):
     cmd2 = "python -m json.tool " + tmpPath + workflowID
     call(shlex.split(cmd2))
    
-    print(cmd1 + "  |  " + cmd2 +'/n')
+    print(cmd1 + "  |  " + cmd2 )
 
 
 if __name__ == '__main__':
