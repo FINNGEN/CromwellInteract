@@ -14,7 +14,7 @@ def submit(wdlPath,inputPath):
 
     cmd = "curl -X POST \"http://localhost/api/workflows/v1\" -H \"accept: application/json\" -H \"Content-Type: multipart/form-data\" -F \"workflowSource=@"+wdlPath +"\" -F \"workflowInputs=@"+inputPath+";type=application/json\" --socks5 localhost:5000"
     call(shlex.split(cmd))
-    
+    print("")
 
 def get_metadata(workflowID):
     with open(tmpPath + workflowID ,'w') as o:
@@ -23,7 +23,7 @@ def get_metadata(workflowID):
     cmd2 = "python -m json.tool " + tmpPath + workflowID
     call(shlex.split(cmd2))
    
-    print(cmd1 + "  |  " + cmd2)
+    print(cmd1 + "  |  " + cmd2 +'/n')
 
 
 if __name__ == '__main__':
