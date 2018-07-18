@@ -3,7 +3,8 @@ import shlex
 import os
 import argparse
 from utils import make_sure_path_exists
-
+import json
+import pyperclip
 
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath =rootPath + 'tmp_path/'
@@ -13,9 +14,16 @@ make_sure_path_exists(tmpPath)
 def submit(wdlPath,inputPath):
 
     cmd = "curl -X POST \"http://localhost/api/workflows/v1\" -H \"accept: application/json\" -H \"Content-Type: multipart/form-data\" -F \"workflowSource=@"+wdlPath +"\" -F \"workflowInputs=@"+inputPath+";type=application/json\" --socks5 localhost:5000"
-    call(shlex.split(cmd))
-    print("")
+    stringCMD = shlex.split(cmd)
+    #call(stringCMD)    
 
+    proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    out, err = proc.communicate()
+    exitcode = proc.returncode
+    jobID = json.loads(out.decode())['id']
+    pyperclip.copy(jobID)
+
+    
 def get_metadata(workflowID):
     with open(tmpPath + workflowID ,'w') as o:
         cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:5000  "

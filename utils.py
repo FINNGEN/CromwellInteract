@@ -1,5 +1,5 @@
 import os
-
+from subprocess import check_call
 def make_sure_path_exists(path):
     import errno
     try:
@@ -9,3 +9,6 @@ def make_sure_path_exists(path):
             raise                
   
   
+def copy2clip(txt):
+    cmd='echo '+txt.strip()+'|clip'
+    return check_call(cmd, shell=True)
