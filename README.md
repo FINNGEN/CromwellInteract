@@ -3,7 +3,7 @@
 Simple script to interact with the cromwell server
 
 ## Requirements
-pyperclip --. `pip install pyperclip`
+pyperclip:  `pip install pyperclip`
 
 ## Usage
 
