@@ -33,7 +33,14 @@ def get_metadata(workflowID):
    
     print(cmd1 + "  |  " + cmd2 )
 
-
+def abort(workflowID):
+    with open(tmpPath + workflowID ,'w') as o:
+        cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/abort\" -H \"accept: application/json\" --socks5 localhost:5000  "
+        call(shlex.split(cmd1),stdout = o)        
+    cmd2 = "python -m json.tool " + tmpPath + workflowID
+    call(shlex.split(cmd2))
+   
+    print(cmd1 + "  |  " + cmd2 )
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
@@ -42,11 +49,11 @@ if __name__ == '__main__':
     # create the parser for the "command_1" command
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
-    parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs',required = True)
+    parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
 
     # create the parser for the "command_2" command
     parser_meta = subparsers.add_parser('metadata', help='help for command_2')
-    parser_meta.add_argument("--id", type= str,help="workflow id")
+    parser_meta.add_argument("id", type= str,help="workflow id")
 
     args = parser.parse_args()
 
@@ -54,5 +61,7 @@ if __name__ == '__main__':
         get_metadata(args.id)
 
     if args.command == "submit":
+        if not args.inputs:
+            args.inputs = args.wdl.replace('wdl','json')
         submit(args.wdl,args.inputs)
     
