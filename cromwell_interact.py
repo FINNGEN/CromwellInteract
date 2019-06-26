@@ -62,6 +62,7 @@ if __name__ == '__main__':
 
     if args.command == "submit":
         if not args.inputs:
-            args.inputs = args.wdl.replace('wdl','json')
+            args.inputs = args.wdl.replace('.wdl','.json')
+        print(args.wdl,args.inputs)
         submit(args.wdl,args.inputs)
     
