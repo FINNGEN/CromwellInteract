@@ -13,9 +13,10 @@ pyperclip:  `pip install pyperclip`
 
 `submit` requires two arguments:\
 `--wdl` : path to the .wdl file  \
-`--inputs` : path to the .json file
+`--inputs` : path to the .json file. If not passed, the script assumes the `.json` file has the same name as the wdl \
+`--labels` : labels that will be logged \
+The script then logs the date,id and labels to a `workflows.log` file in the script directory and it also automatically copies the id to the clipboard
 
-it also automatically copies the id to the clipboard
+`metadata` requires the workflow id as a positional argument
 
-`metadata` requires:\
-`--id`: the worflow id
+`abort` requires the workflow id as a positional argument

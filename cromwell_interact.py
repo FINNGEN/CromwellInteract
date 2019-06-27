@@ -1,17 +1,13 @@
 from subprocess import Popen,PIPE,call
-import shlex
-import os
-import argparse
+import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists
-import json
-import pyperclip
 
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath =rootPath + 'tmp_path/'
 make_sure_path_exists(tmpPath)
 
 
-def submit(wdlPath,inputPath):
+def submit(wdlPath,inputPath,label = ''):
 
     cmd = "curl -X POST \"http://localhost/api/workflows/v1\" -H \"accept: application/json\" -H \"Content-Type: multipart/form-data\" -F \"workflowSource=@"+wdlPath +"\" -F \"workflowInputs=@"+inputPath+";type=application/json\" --socks5 localhost:5000"
     stringCMD = shlex.split(cmd)
@@ -22,6 +18,9 @@ def submit(wdlPath,inputPath):
     exitcode = proc.returncode
     jobID = json.loads(out.decode())['id']
     pyperclip.copy(jobID)
+    current_date = datetime.datetime.today().strftime('%Y-%m-%d')
+    with open(os.path.join(rootPath,'workflows.log'),'a') as o:
+        o.write(' '.join([current_date,jobID,label]) + '\n')
 
     
 def get_metadata(workflowID):
@@ -35,27 +34,35 @@ def get_metadata(workflowID):
 
 def abort(workflowID):
     with open(tmpPath + workflowID ,'w') as o:
-        cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/abort\" -H \"accept: application/json\" --socks5 localhost:5000  "
+        cmd1 = "curl -X POST \"http://localhost/api/workflows/v1/" + str(workflowID) + "/abort\" -H \"accept: application/json\" --socks5 localhost:5000  "
         call(shlex.split(cmd1),stdout = o)        
     cmd2 = "python -m json.tool " + tmpPath + workflowID
     call(shlex.split(cmd2))
    
     print(cmd1 + "  |  " + cmd2 )
+
+
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
 
-    # create the parser for the "command_1" command
+    # submit parser
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
-
-    # create the parser for the "command_2" command
-    parser_meta = subparsers.add_parser('metadata', help='help for command_2')
+    parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
+    # metadata parser
+    parser_meta = subparsers.add_parser('metadata')
     parser_meta.add_argument("id", type= str,help="workflow id")
+    # abort parser
+    parser_abort = subparsers.add_parser('abort' )
+    parser_abort.add_argument("id", type= str,help="workflow id")
 
     args = parser.parse_args()
+
+    if args.command =='abort':
+        abort(args.id)
 
     if args.command == "metadata":
         get_metadata(args.id)
@@ -63,6 +70,6 @@ if __name__ == '__main__':
     if args.command == "submit":
         if not args.inputs:
             args.inputs = args.wdl.replace('.wdl','.json')
-        print(args.wdl,args.inputs)
-        submit(args.wdl,args.inputs)
+        print(args.wdl,args.inputs,args.label)
+        submit(args.wdl,args.inputs,args.label)
     
