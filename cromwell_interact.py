@@ -50,6 +50,7 @@ def get_n_jobs(jsondat):
     pass
 def get_n_running_jobs(jsondat):
     pass
+
 def get_n_failed_jobs(jsondat):
     pass
 
@@ -93,6 +94,22 @@ def print_summary(metadat):
         callstat = ", ".join([ f'{stat}:{n}' for stat,n in v.items()])
         print(f'Call "{k}"\nBasepath\t{summary[1][k]}\njob statuses\t {callstat}')
 
+def print_failed_jobs(metadata, args):
+    failed_jobs = [ metadat ]
+
+    fails = [ (c, [j for j in v if j["executionStatus"]=="Failed" ] ) for c,v in metadata["calls"].items() ]
+
+    for call,v in fails:
+        if len(v)==0:
+            continue
+
+        for j in v:
+            print(f'Failed {call}\tcall#{j["shardIndex"]}')
+            print(f'logpath\t{j["stdout"]}')
+            fail_msgs = [ f['message'] for f in j["failures"] ]
+            "\n".join(fail_msgs)
+
+
 def abort(workflowID):
     cmd1 = "curl -X POST \"http://localhost/api/workflows/v1/" + str(workflowID) + "/abort\" -H \"accept: application/json\" --socks5 localhost:5000  "
     pr = subprocess.run(shlex.split(cmd1), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='ASCII' )
@@ -115,6 +132,7 @@ if __name__ == '__main__':
     parser_meta.add_argument("id", type= str,help="workflow id")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
+    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of workflow")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
@@ -131,6 +149,9 @@ if __name__ == '__main__':
         metadat = get_metadata(args)
         if args.summary:
             print_summary(metadat)
+
+        if args.failed_jobs:
+            print_failed_jobs(metadat, args)
 
 
     if args.command == "submit":
