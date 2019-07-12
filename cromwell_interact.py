@@ -1,9 +1,10 @@
-from subprocess import Popen,PIPE,call
+#! /usr/bin/env python3
+from subprocess import Popen,PIPE,call,run
 import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists
 from collections import defaultdict
 import re
-
+import sys
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath =rootPath
 make_sure_path_exists(tmpPath)
@@ -35,12 +36,22 @@ def get_metadata(args):
     workflowID = args.id
     if not args.file:
         metadat = f"{tmpPath}{workflowID}.json"
-        with open(f"{tmpPath}{workflowID}.json" ,'w') as o:
+        with open(metadat ,'w') as o:
             cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:5000  "
-            call(shlex.split(cmd1),stdout = o)
-            print(cmd1)
-            metadat = args.file
+            pr = Popen(shlex.split(cmd1), stdout=o, stderr=PIPE)
+
+            while True:
+                line=pr.stderr.read(1)
+                if line.decode("ASCII") == '' and pr.poll() != None:
+                    break
+                sys.stdout.write(line.decode("ASCII"))
+                sys.stdout.flush()
+
+            if pr.returncode!=0:
+                raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Error:\n{pr.stderr}')
+
             print(f"Metadata saved to {tmpPath + workflowID}.json")
+
     else:
         metadat=args.file
     print(f'opening {metadat}' )
@@ -68,17 +79,13 @@ def get_workflow_status(jsondat):
 
 
 def get_job_summary(jsondat):
-
     summaries = defaultdict( lambda: defaultdict(int) )
-
     paths = {}
     for call,v in jsondat["calls"].items():
         for job in v:
             if call not in paths:
-                print(job["stdout"])
                 paths[call] =  re.sub(r'shard-[0-9]*/stdout', '', job["stdout"])
             summaries[call][ f'{job["executionStatus"]}{ "_"+job["backendStatus"] if "backendStatus" in job else "" }' ]+=1
-
     return (summaries,paths)
 
 
@@ -89,16 +96,16 @@ def print_summary(metadat):
     print(f'Start\t{times[0]} \nEnd\t{times[1]}')
 
     print(f'Current status \t { get_workflow_status(metadat)}')
-
+    print("")
     for k,v in summary[0].items():
         callstat = ", ".join([ f'{stat}:{n}' for stat,n in v.items()])
-        print(f'Call "{k}"\nBasepath\t{summary[1][k]}\njob statuses\t {callstat}')
+        print(f'Call "{k}"\nBasepath\t{summary[1][k]}\njob statuses\t {callstat}\n')
 
 def print_failed_jobs(metadata, args):
     failed_jobs = [ metadat ]
 
     fails = [ (c, [j for j in v if j["executionStatus"]=="Failed" ] ) for c,v in metadata["calls"].items() ]
-
+    print("FAILED JOBS:")
     for call,v in fails:
         if len(v)==0:
             continue
@@ -107,7 +114,7 @@ def print_failed_jobs(metadata, args):
             print(f'Failed {call}\tcall#{j["shardIndex"]}')
             print(f'logpath\t{j["stdout"]}')
             fail_msgs = [ f['message'] for f in j["failures"] ]
-            "\n".join(fail_msgs)
+            "\n\n".join(fail_msgs)
 
 
 def abort(workflowID):
@@ -137,6 +144,10 @@ if __name__ == '__main__':
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
 
+    parser_abort = subparsers.add_parser('connect' )
+    parser_abort.add_argument("server", type=str,help="Cromwell server name")
+    parser_abort.add_argument("--port", type=int, default=5000, help="SSH port")
+
     args = parser.parse_args()
 
     if args.outpath:
@@ -144,18 +155,24 @@ if __name__ == '__main__':
 
     if args.command =='abort':
         abort(args.id)
-
-    if args.command == "metadata":
+    elif args.command == "metadata":
         metadat = get_metadata(args)
         if args.summary:
             print_summary(metadat)
-
         if args.failed_jobs:
             print_failed_jobs(metadat, args)
-
-
-    if args.command == "submit":
+    elif args.command == "submit":
         if not args.inputs:
             args.inputs = args.wdl.replace('.wdl','.json')
         print(args.wdl,args.inputs,args.label)
         submit(args.wdl,args.inputs,args.label)
+    elif args.command == "connect":
+        print("Trying to connect to server...")
+        pr = Popen(f'gcloud compute ssh {args.server} -- -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"', shell=True, stdout=PIPE ,stderr=PIPE, encoding="ASCII")
+        pr.wait(5)
+
+        print(pr.stdout.read())
+        if pr.returncode!=0:
+            raise Exception(f'Error occurred trying to connect. Error:\n{ pr.stderr.read()}')
+        else:
+            print("Connection opened")
