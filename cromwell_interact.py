@@ -70,7 +70,7 @@ def get_n_waiting_jobs(jsondat):
     pass
 
 def get_workflow_exec_time(jsondat):
-    return [jsondat["start"],jsondat["end"]]
+    return [jsondat["start"] if "start" in jsondat else "NA",jsondat["end"] if "end" in jsondat else "NA"]
 
 def get_workflow_name(jsondat):
     return jsondat["workflowName"]
@@ -100,10 +100,9 @@ def get_job_summary(jsondat):
 def print_summary(metadat):
     summary = get_job_summary(metadat)
     print(f'Workflow name\t{ get_workflow_name(metadat) } ')
-    times = get_workflow_exec_time(metadat)
-    print(f'Start\t{times[0]} \nEnd\t{times[1]}')
-
     print(f'Current status \t { get_workflow_status(metadat)}')
+    times =get_workflow_exec_time(metadat)
+    print(f'Start\t{times[0]} \nEnd\t{times[1]}')
     print("")
     for k,v in summary[0].items():
         callstat = ", ".join([ f'{stat}:{n}' for stat,n in v.items()])
