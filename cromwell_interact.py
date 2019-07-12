@@ -59,6 +59,7 @@ def get_metadata(args):
 
 def get_n_jobs(jsondat):
     pass
+
 def get_n_running_jobs(jsondat):
     pass
 
@@ -82,9 +83,16 @@ def get_job_summary(jsondat):
     summaries = defaultdict( lambda: defaultdict(int) )
     paths = {}
     for call,v in jsondat["calls"].items():
+        uniq_shards={}
         for job in v:
             if call not in paths:
                 paths[call] =  re.sub(r'shard-[0-9]*/stdout', '', job["stdout"])
+
+            ## add the last attempt for each shard-1 because retryable failures and new tries are reported separately
+            if job["shardIndex"] not in uniq_shards or int(job["attempt"])>int(uniq_shards[job["shardIndex"]]["attempt"]):
+                uniq_shards[job["shardIndex"]]=job
+
+        for job in uniq_shards.values():
             summaries[call][ f'{job["executionStatus"]}{ "_"+job["backendStatus"] if "backendStatus" in job else "" }' ]+=1
     return (summaries,paths)
 
