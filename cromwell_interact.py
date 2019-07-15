@@ -140,7 +140,7 @@ if __name__ == '__main__':
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
-    parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
+    parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = "")
     # metadata parser
     parser_meta = subparsers.add_parser('metadata')
     parser_meta.add_argument("id", type= str,help="workflow id")
@@ -154,6 +154,10 @@ if __name__ == '__main__':
     parser_abort = subparsers.add_parser('connect' )
     parser_abort.add_argument("server", type=str,help="Cromwell server name")
     parser_abort.add_argument("--port", type=int, default=5000, help="SSH port")
+
+    # logging parser
+    parser_log = subparsers.add_parser('log', help='prints the log')
+    parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
 
     args = parser.parse_args()
 
@@ -183,3 +187,11 @@ if __name__ == '__main__':
             raise Exception(f'Error occurred trying to connect. Error:\n{ pr.stderr.read()}')
         else:
             print("Connection opened")
+
+            
+    if args.command == "log":
+        with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
+            data = i.readlines()
+        idx = min(args.n,len(data))
+        for line in data[-idx:]: print(line.strip())
+                
