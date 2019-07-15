@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 from subprocess import Popen,PIPE,call,run
+import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists
 from collections import defaultdict
@@ -10,17 +11,26 @@ tmpPath =rootPath
 make_sure_path_exists(tmpPath)
 
 
-def submit(wdlPath,inputPath,label = ''):
+def submit(wdlPath,inputPath,label = '', dependencies=None):
 
-    cmd = "curl -X POST \"http://localhost/api/workflows/v1\" -H \"accept: application/json\" -H \"Content-Type: multipart/form-data\" -F \"workflowSource=@"+wdlPath +"\" -F \"workflowInputs=@"+inputPath+";type=application/json\" --socks5 localhost:5000"
-    stringCMD = shlex.split(cmd)
+    cmd = (f'curl -X POST "http://localhost/api/workflows/v1" -H "accept: application/json" -H "Content-Type: multipart/form-data" '
+           f' -F "workflowSource=@{wdlPath}" -F "workflowInputs=@{inputPath};type=application/json" --socks5 localhost:5000'
+          )
+
+    if dependencies is not None:
+        cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
+
     #call(stringCMD)
-
+    stringCMD = shlex.split(cmd)
     proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     out, err = proc.communicate()
     exitcode = proc.returncode
-    jobID = json.loads(out.decode())['id']
+    if exitcode!=0:
+        raise Exception(f'Error while submitting job. Error:\n{err}')
+    resp = json.loads(out.decode())
+    jobID = resp['id']
     pyperclip.copy(jobID)
+    print(resp)
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
         o.write(' '.join([current_date,jobID,label]) + '\n')
@@ -126,9 +136,13 @@ def print_failed_jobs(metadata, args):
 
 def abort(workflowID):
     cmd1 = "curl -X POST \"http://localhost/api/workflows/v1/" + str(workflowID) + "/abort\" -H \"accept: application/json\" --socks5 localhost:5000  "
-    pr = subprocess.run(shlex.split(cmd1), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='ASCII' )
-    print(cmd1)
-    print(json.loads(pr.stdout))
+    pr = subprocess.run(shlex.split(cmd1), stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='ASCII' )
+    if pr.returncode!=0:
+        print("Error occurred while submitting abort command to cromwell")
+        print(pr.stderr)
+    else:
+        #print(cmd1)
+        print(json.loads(pr.stdout))
 
 if __name__ == '__main__':
 
@@ -140,6 +154,7 @@ if __name__ == '__main__':
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
+    parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
     # metadata parser
     parser_meta = subparsers.add_parser('metadata')
@@ -172,7 +187,7 @@ if __name__ == '__main__':
         if not args.inputs:
             args.inputs = args.wdl.replace('.wdl','.json')
         print(args.wdl,args.inputs,args.label)
-        submit(args.wdl,args.inputs,args.label)
+        submit(args.wdl,args.inputs,args.label, args.deps)
     elif args.command == "connect":
         print("Trying to connect to server...")
         pr = Popen(f'gcloud compute ssh {args.server} -- -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"', shell=True, stdout=PIPE ,stderr=PIPE, encoding="ASCII")
@@ -180,6 +195,6 @@ if __name__ == '__main__':
 
         print(pr.stdout.read())
         if pr.returncode!=0:
-            raise Exception(f'Error occurred trying to connect. Error:\n{ pr.stderr.read()}')
+            raise Exception(f'Error occurred trying to connect. Error:\n{ pr.stderr.read()} {pr.stdout.read()}')
         else:
             print("Connection opened")
