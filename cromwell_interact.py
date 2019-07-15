@@ -19,8 +19,9 @@ def submit(wdlPath,inputPath,label = ''):
     jobID = json.loads(out.decode())['id']
     pyperclip.copy(jobID)
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
+    wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
-        o.write(' '.join([current_date,jobID,label]) + '\n')
+        o.write(' '.join([current_date,wdl_name,jobID,label]) + '\n')
 
     
 def get_metadata(workflowID):
@@ -59,6 +60,9 @@ if __name__ == '__main__':
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
 
+    parser_log = subparsers.add_parser('log', help='prints the log')
+    parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
+    
     args = parser.parse_args()
 
     if args.command =='abort':
@@ -73,3 +77,12 @@ if __name__ == '__main__':
         print(args.wdl,args.inputs,args.label)
         submit(args.wdl,args.inputs,args.label)
     
+
+    if args.command == "log":
+        with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
+            data = i.readlines()
+        idx = min(args.n,len(data))
+        for line in data[-idx:]: print(line.strip())
+                
+
+        
