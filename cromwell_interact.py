@@ -6,9 +6,9 @@ from utils import make_sure_path_exists
 from collections import defaultdict
 import re
 import sys
-rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
-tmpPath =rootPath
-make_sure_path_exists(tmpPath)
+#rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
+tmpPath =""
+#make_sure_path_exists(tmpPath)
 
 
 def submit(wdlPath,inputPath,label = '', dependencies=None):
@@ -42,29 +42,26 @@ def workflowstatus(jsondat):
 def get_workflow_failures(jsondat):
     return [ m["message"] for m in d["failures"][0].values() ]
 
-def get_metadata(args):
-    workflowID = args.id
-    if not args.file:
-        metadat = f"{tmpPath}{workflowID}.json"
-        with open(metadat ,'w') as o:
-            cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:5000  "
-            pr = Popen(shlex.split(cmd1), stdout=o, stderr=PIPE)
+def get_metadata(id):
+    workflowID = id
 
-            while True:
-                line=pr.stderr.read(1)
-                if line.decode("ASCII") == '' and pr.poll() != None:
-                    break
-                sys.stdout.write(line.decode("ASCII"))
-                sys.stdout.flush()
+    metadat = f"{tmpPath}{workflowID}.json"
+    with open(metadat ,'w') as o:
+        cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:5000  "
 
-            if pr.returncode!=0:
-                raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Error:\n{pr.stderr}')
+        # interim output looks ugly in case of sub workflows
+        #while True:
+        #    line=pr.stderr.read(1)
+        #    if line.decode("ASCII") == '' and pr.poll() != None:
+        #        break
+        #    sys.stdout.write(line.decode("ASCII"))
+        #    sys.stdout.flush()
 
-            print(f"Metadata saved to {tmpPath + workflowID}.json")
-
-    else:
-        metadat=args.file
-    print(f'opening {metadat}' )
+        pr = subprocess.run(shlex.split(cmd1), stdout=o, stderr=PIPE, encoding="ASCII")
+        if pr.returncode!=0:
+            print(pr.stderr)
+            raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
+        print(f"Metadata saved to {tmpPath + workflowID}.json")
     return json.load(open(metadat,'r'))
 
 def get_n_jobs(jsondat):
@@ -89,49 +86,87 @@ def get_workflow_status(jsondat):
     return jsondat['status']
 
 
-def get_job_summary(jsondat):
-    summaries = defaultdict( lambda: defaultdict(int) )
+def get_workflow_summary(jsondat):
+    summaries = defaultdict( lambda: dict() )
     paths = {}
     for call,v in jsondat["calls"].items():
         uniq_shards={}
+        summaries[call]['jobstats'] = {}
+        summaries[call]['failed_jobs'] = []
         for job in v:
-            if call not in paths:
-                paths[call] =  re.sub(r'shard-[0-9]*/stdout', '', job["stdout"])
-
-            ## add the last attempt for each shard-1 because retryable failures and new tries are reported separately
             if job["shardIndex"] not in uniq_shards or int(job["attempt"])>int(uniq_shards[job["shardIndex"]]["attempt"]):
                 uniq_shards[job["shardIndex"]]=job
 
         for job in uniq_shards.values():
-            summaries[call][ f'{job["executionStatus"]}{ "_"+job["backendStatus"] if "backendStatus" in job else "" }' ]+=1
-    return (summaries,paths)
+            stat_str = f'{job["executionStatus"]}{ "_"+job["backendStatus"] if "backendStatus" in job else "" }'
+            if stat_str not in summaries[call]['jobstats']:
+               summaries[call]['jobstats'][stat_str]=0
+            summaries[call]['jobstats'][stat_str]+=1
+
+            if job["executionStatus"]=="Failed":
+                summaries[call]['failed_jobs'].append(job)
+
+            if "subWorkflowId" not in job:
+                parts=job["stdout"].split("/")
+                for i in range(len(parts)-1,0,-1):
+                    if parts[i].startswith("shard-"):
+                        summaries[call]['basepath']= "/".join(parts[0:i]  )
+                        break
+
+            else:
+                summaries[call]['subworkflowid'] = job["subWorkflowId"]
+
+    return (summaries)
 
 
-def print_summary(metadat):
-    summary = get_job_summary(metadat)
-    print(f'Workflow name\t{ get_workflow_name(metadat) } ')
-    print(f'Current status \t { get_workflow_status(metadat)}')
+def ind(n):
+    return "\t".join([""]*(n+1))
+
+
+def print_summary(metadat, args,indent=0):
+    summary = get_workflow_summary(metadat)
+
+    print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
+    print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
     times =get_workflow_exec_time(metadat)
-    print(f'Start\t{times[0]} \nEnd\t{times[1]}')
+    print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
     print("")
-    for k,v in summary[0].items():
-        callstat = ", ".join([ f'{stat}:{n}' for stat,n in v.items()])
-        print(f'Call "{k}"\nBasepath\t{summary[1][k]}\njob statuses\t {callstat}\n')
+    for k,v in summary.items():
+        callstat = ", ".join([ f'{stat}:{n}' for stat,n in v['jobstats'].items()])
+        #print(f'{ind(indent)}\n--------------')
+        print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else "sub-workflow" }\n{ind(indent)}job statuses\t {callstat}')
 
-def print_failed_jobs(metadata, args):
-    failed_jobs = [ metadat ]
+        if args.failed_jobs:
+            print_failed_jobs(v["failed_jobs"], indent=indent)
+        print("")
+        if 'subworkflowid' in v:
+            sub=get_metadata(v["subworkflowid"])
+            print(f'{ind(indent)}Sub-workflow:')
+            print_summary(sub, args, indent+1)
 
-    fails = [ (c, [j for j in v if j["executionStatus"]=="Failed" ] ) for c,v in metadata["calls"].items() ]
-    print("FAILED JOBS:")
-    for call,v in fails:
-        if len(v)==0:
-            continue
 
-        for j in v:
-            print(f'Failed {call}\tcall#{j["shardIndex"]}')
-            print(f'logpath\t{j["stdout"]}')
-            fail_msgs = [ f['message'] for f in j["failures"] ]
-            "\n\n".join(fail_msgs)
+def get_failmsg(failure):
+    while len(failure["causedBy"])>0:
+        failure = failure["causedBy"][0]
+    return failure["message"]
+
+def print_failed_jobs(joblist, indent=0):
+    print(f'{ind(indent)}FAILED JOBS:')
+    if len(joblist)==0:
+        print(f'{ind(indent)}No failed jobs!\n')
+        return
+
+    for j in joblist:
+        print(f'{ind(indent)}Failed\tshard# {j["shardIndex"]}')
+        # nested caused bys in subworkflows
+        fail_msgs = [ get_failmsg(f) for f in j["failures"] ]
+        #for f in j["failures"]:
+        #    while len(f["causedBy"])>0:
+        #        f=f["causedBy"]
+        #        print(f)
+        #        fail_msgs.append(f["message"])
+
+        print("{}{}".format(ind(indent),"\n\n".join(fail_msgs)))
 
 
 def abort(workflowID):
@@ -157,11 +192,11 @@ if __name__ == '__main__':
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
     # metadata parser
-    parser_meta = subparsers.add_parser('metadata')
+    parser_meta = subparsers.add_parser('metadata', help="Requests metadata and summaries of workflows")
     parser_meta.add_argument("id", type= str,help="workflow id")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
-    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of workflow")
+    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
@@ -182,11 +217,14 @@ if __name__ == '__main__':
     if args.command =='abort':
         abort(args.id)
     elif args.command == "metadata":
-        metadat = get_metadata(args)
-        if args.summary:
-            print_summary(metadat)
-        if args.failed_jobs:
-            print_failed_jobs(metadat, args)
+        if args.file:
+            metadat=json.load(open(args.file))
+        else:
+            metadat = get_metadata(args.id)
+
+        if args.summary or args.failed_jobs:
+            print_summary(metadat, args=args)
+
     elif args.command == "submit":
         if not args.inputs:
             args.inputs = args.wdl.replace('.wdl','.json')
@@ -194,15 +232,10 @@ if __name__ == '__main__':
         submit(args.wdl,args.inputs,args.label, args.deps)
     elif args.command == "connect":
         print("Trying to connect to server...")
-        pr = Popen(f'gcloud compute ssh {args.server} -- -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"', shell=True, stdout=PIPE ,stderr=PIPE, encoding="ASCII")
-        pr.wait(5)
+        subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"',
+                    shell=True, encoding="ASCII")
 
-        print(pr.stdout.read())
-        if pr.returncode!=0:
-            raise Exception(f'Error occurred trying to connect. Error:\n{ pr.stderr.read()} {pr.stdout.read()}')
-        else:
-            print("Connection opened")
-
+        print(f'Connection opened to {args.server} via localhost:{args.port}')
 
     if args.command == "log":
         with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
