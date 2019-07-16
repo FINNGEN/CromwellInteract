@@ -107,12 +107,7 @@ def get_workflow_summary(jsondat):
                 summaries[call]['failed_jobs'].append(job)
 
             if "subWorkflowId" not in job:
-                parts=job["stdout"].split("/")
-                for i in range(len(parts)-1,0,-1):
-                    if parts[i].startswith("shard-"):
-                        summaries[call]['basepath']= "/".join(parts[0:i]  )
-                        break
-
+                summaries[call]["basepath"] = re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
             else:
                 summaries[call]['subworkflowid'] = job["subWorkflowId"]
 
