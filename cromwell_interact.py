@@ -6,9 +6,9 @@ from utils import make_sure_path_exists
 from collections import defaultdict
 import re
 import sys
-#rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
-tmpPath =""
-#make_sure_path_exists(tmpPath)
+rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
+tmpPath = os.path.join(rootPath,'tmp')
+make_sure_path_exists(tmpPath)
 
 
 def submit(wdlPath,inputPath,label = '', dependencies=None):
@@ -45,7 +45,7 @@ def get_workflow_failures(jsondat):
 def get_metadata(id):
     workflowID = id
 
-    metadat = f"{tmpPath}{workflowID}.json"
+    metadat = f"{os.path.join(tmpPath,workflowID +'json')}"
     with open(metadat ,'w') as o:
         cmd1 = "curl -X GET \"http://localhost/api/workflows/v1/" + str(workflowID) + "/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:5000  "
 
@@ -61,7 +61,7 @@ def get_metadata(id):
         if pr.returncode!=0:
             print(pr.stderr)
             raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
-        print(f"Metadata saved to {tmpPath + workflowID}.json")
+        print(f"Metadata saved to {metadat}")
     return json.load(open(metadat,'r'))
 
 def get_n_jobs(jsondat):
