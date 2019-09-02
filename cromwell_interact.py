@@ -32,8 +32,9 @@ def submit(wdlPath,inputPath,label = '', dependencies=None):
     pyperclip.copy(jobID)
     print(resp)
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
+    wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
-        o.write(' '.join([current_date,jobID,label]) + '\n')
+        o.write(' '.join([current_date,wdl_name,jobID,label]) + '\n')
 
 
 def workflowstatus(jsondat):
@@ -200,10 +201,9 @@ if __name__ == '__main__':
     parser_abort.add_argument("server", type=str,help="Cromwell server name")
     parser_abort.add_argument("--port", type=int, default=5000, help="SSH port")
 
-    # logging parser
     parser_log = subparsers.add_parser('log', help='prints the log')
     parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
-
+    
     args = parser.parse_args()
 
     if args.outpath:
@@ -229,11 +229,11 @@ if __name__ == '__main__':
         print("Trying to connect to server...")
         subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"',
                     shell=True, encoding="ASCII")
-
         print(f'Connection opened to {args.server} via localhost:{args.port}')
-
+    
     if args.command == "log":
         with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
             data = i.readlines()
         idx = min(args.n,len(data))
         for line in data[-idx:]: print(line.strip())
+                 
