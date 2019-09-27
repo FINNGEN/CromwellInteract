@@ -112,6 +112,7 @@ def get_workflow_summary(jsondat):
         summary[call]['min_job']=None
         summary[call]['max_job']=None
         summary[call]['failed_jobs']=[]
+        summary[call]['finished_jobs']=0
         summary[call]['total_time']=0
 
         for i,job in uniq_shards.items():
@@ -121,6 +122,7 @@ def get_workflow_summary(jsondat):
 
             if 'start' in job and 'end' in job:
                 duration = (dateutil.parser.parse(job['end']) -dateutil.parser.parse( job['start'] )).total_seconds()
+                summary[call]['finished_jobs']+=1
                 if summary[call]['min_time'] is None or duration < summary[call]['min_time']:
                     summary[call]['min_time'] = duration
                     if 'stdout' in job:
@@ -173,7 +175,7 @@ def print_summary(metadat, args, port, indent=0, top_call_counts=None, expand_su
         print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else "sub-workflow" }\n{ind(indent)}job statuses\t {callstat}')
         max = f'{v["max_time"]/60.0:.2f}' if v["max_time"] is not None else None
         min = f'{v["min_time"]/60.0:.2f}' if v["min_time"] is not None else None
-        print(f'{ind(indent)}Max time: {max} minutes, min time {min} minutes , average time {v["total_time"]/totaljobs/60.0:.2f} minutes')
+        print(f'{ind(indent)}Max time: {max} minutes, min time {min} minutes , average time {v["total_time"]/v["finished_jobs"]/60.0:.2f} minutes')
         print(f'{ind(indent)}Max job {v["max_job"]}\n{ind(indent)}Min job {v["min_job"]}')
         if args.failed_jobs:
             print_failed_jobs(v["failed_jobs"], indent=indent)
