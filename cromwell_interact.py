@@ -3,7 +3,7 @@ from subprocess import Popen,PIPE,call,run
 import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists
-from collections import defaultdict
+from collections import defaultdict, Counter
 import re
 import sys
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
@@ -31,7 +31,7 @@ def submit(wdlPath,inputPath,port,label = '', dependencies=None):
         raise Exception(f'Error while submitting job. Error:\n{err}')
     resp = json.loads(out.decode())
 
-    if resp['status']=='fail':
+    if resp['status']=='fail' or resp['status']=='Failed':
         raise Exception(f'Error in Cromwell request. Error:{resp["message"]}' )
     jobID = resp['id']
     print(jobID)
@@ -69,8 +69,12 @@ def get_metadata(id, port,timeout=60):
         print(f"Metadata saved to {metadat}")
 
     ret = json.load(open(metadat,'r'))
-    if ret['status']=='fail':
+    if ret['status']=='fail' :
         raise Exception(f'Error requesting metadata. Cromwell message: {ret["message"]}')
+
+    #if ret['status']=='Failed':
+    #    raise Exception(f'Workflow not submitted successfully. Cromwell message: { ret["failures"]}')
+
     return json.load(open(metadat,'r'))
 
 def get_n_jobs(jsondat):
@@ -95,7 +99,7 @@ def get_workflow_status(jsondat):
     return jsondat['status']
 
 
-def get_workflow_summary(jsondat):
+def get_workflow_summary(jsondat, store_with_status=None):
     summaries = defaultdict( lambda: dict() )
     summary= defaultdict(lambda: dict())
     paths = {}
@@ -105,8 +109,11 @@ def get_workflow_summary(jsondat):
         for job in v:
             if job["shardIndex"] not in uniq_shards or int(job["attempt"])>int(uniq_shards[job["shardIndex"]]["attempt"]):
                 uniq_shards[job["shardIndex"]]=job
-        summary[call]['jobstats']= defaultdict(int)
+        summary[call]['jobstats']= Counter()
         summary[call]['failed_jobs']=[]
+
+        summary[call][store_with_status]=[]
+
         summary[call]['min_time']=None
         summary[call]['max_time']=None
         summary[call]['min_job']=None
@@ -116,8 +123,10 @@ def get_workflow_summary(jsondat):
         summary[call]['total_time']=0
 
         for i,job in uniq_shards.items():
-            summaries[f'{call}_{i}']['jobstats'] = defaultdict(int)
+            summaries[f'{call}_{i}']['jobstats'] = Counter()
             summaries[f'{call}_{i}']['failed_jobs'] = []
+            summaries[f'{call}_{i}'][store_with_status] = []
+
             stat_str = f'{job["executionStatus"]}{ "_"+job["backendStatus"] if "backendStatus" in job else "" }'
 
             if 'start' in job and 'end' in job:
@@ -141,6 +150,12 @@ def get_workflow_summary(jsondat):
             if job["executionStatus"]=="Failed":
                 summaries[f'{call}_{i}']['failed_jobs'].append(job)
                 summary[call]['failed_jobs'].append(job)
+
+            if job["executionStatus"]==store_with_status:
+
+                summaries[f'{call}_{i}'][store_with_status].append(job)
+                summary[call][store_with_status].append(job)
+
             if "subWorkflowId" not in job:
                 if "stdout" in job:
                     summaries[f'{call}_{i}']["basepath"] = re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
@@ -155,20 +170,29 @@ def ind(n):
     return "\t".join([""]*(n+1))
 
 
-def print_summary(metadat, args, port, indent=0, top_call_counts=None, expand_subs=False, timeout=60):
-    summary,summaries = get_workflow_summary(metadat)
+def get_jobs_with_status(jsondat, status):
+
+    return [ v for (c,v) in jsondat["calls"].items() if v["executionStatus"]==status ]
+
+def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
+    summary,summaries = get_workflow_summary(metadat, args.print_jobs_with_status)
     print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
     print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
     times =get_workflow_exec_time(metadat)
     print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
     print("")
 
+
+    top_call_counts = defaultdict(lambda :Counter())
+
     for k,v in summary.items():
         callstat = ", ".join([ f'{stat}:{n}' for stat,n in v['jobstats'].items()])
 
         totaljobs= 0
-
+        print(k)
+        print(v)
         for stat, n in v['jobstats'].items():
+            print(stat)
             top_call_counts[k][stat]+=n
             totaljobs +=n
 
@@ -180,6 +204,10 @@ def print_summary(metadat, args, port, indent=0, top_call_counts=None, expand_su
         print(f'{ind(indent)}Max job {v["max_job"]}\n{ind(indent)}Min job {v["min_job"]}')
         if args.failed_jobs:
             print_failed_jobs(v["failed_jobs"], indent=indent)
+
+        if args.print_jobs_with_status:
+            print_jobs_with_status(v[args.print_jobs_with_status],args.print_jobs_with_status, indent=indent)
+
         print("")
 
     for k,v in summaries.items():
@@ -192,13 +220,33 @@ def print_summary(metadat, args, port, indent=0, top_call_counts=None, expand_su
             if expand_subs:
                 print("getting sub data")
                 sub=get_metadata(v["subworkflowid"], port=port, timeout=timeout)
-                print_summary(sub, args, port=port,indent=indent+1, top_call_counts=top_call_counts, expand_subs=expand_subs)
+                (top, summ) = print_summary(sub, args, port=port,indent=indent+1, expand_subs=expand_subs)
+                for call,count in top.items():
+                    if call in top_call_counts:
+                        top_call_counts[call] = top_call_counts[call] + count
+                        summary[call]['failed_jobs'] = summary[call]['failed_jobs'].extend(summ[call]['failed_jobs'])
+                        summary[call][args.print_jobs_with_status] = summary[call][args.print_jobs_with_status].extend(summ[call][args.print_jobs_with_status])
+                    else:
+                        top_call_counts[call] = count
+                        summary[call]['failed_jobs'] = summ[call]['failed_jobs']
+                        summary[call][args.print_jobs_with_status] = summ[call][args.print_jobs_with_status]
 
+        return (top_call_counts,summary)
 
 def get_failmsg(failure):
     while len(failure["causedBy"])>0:
         failure = failure["causedBy"][0]
     return failure["message"]
+
+def print_jobs_with_status(joblist, status ,indent=0):
+    print(f'{ind(indent)}Jobs with status {status}:')
+    if len(joblist)==0:
+        print(f'{ind(indent)}No jobs with status {status}!\n')
+        return
+
+    for j in joblist:
+        print(j)
+        print(f'{ind(indent)}Job \tshard# {j["shardIndex"]}')
 
 def print_failed_jobs(joblist, indent=0):
     print(f'{ind(indent)}FAILED JOBS:')
@@ -207,6 +255,7 @@ def print_failed_jobs(joblist, indent=0):
         return
 
     for j in joblist:
+
         print(f'{ind(indent)}Failed\tshard# {j["shardIndex"]}')
         # nested caused bys in subworkflows
         fail_msgs = [ get_failmsg(f) for f in j["failures"] ]
@@ -248,7 +297,9 @@ if __name__ == '__main__':
     parser_meta.add_argument("id", type= str,help="workflow id")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
-    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs")
+    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
+    parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
+    parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
     parser_meta.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
@@ -274,11 +325,18 @@ if __name__ == '__main__':
             metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout)
 
         if args.summary or args.failed_jobs:
-            top_call_counts = defaultdict( lambda: defaultdict(int))
-            print_summary(metadat, args=args, port=args.port, top_call_counts=top_call_counts , expand_subs=True, timeout=args.cromwell_timeout )
+            top_call_counts, summary = print_summary(metadat, args=args, port=args.port , expand_subs=True, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
             print("Total call statuses across subcalls:")
             print(callstat)
+
+            if args.summarize_failed_jobs:
+                failures = []
+                for c, s in summary.items():
+                    failures.extend(s['failed_jobs'])
+
+                print_failed_jobs(failures)
+
 
     elif args.command == "submit":
         if not args.inputs:
