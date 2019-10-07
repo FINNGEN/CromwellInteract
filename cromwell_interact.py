@@ -156,11 +156,14 @@ def get_workflow_summary(jsondat, store_with_status=None):
                 summaries[f'{call}_{i}'][store_with_status].append(job)
                 summary[call][store_with_status].append(job)
 
+            if call=="finemap.ldstore_finemap":
+                print(job)
             if "subWorkflowId" not in job:
                 if "stdout" in job:
                     summaries[f'{call}_{i}']["basepath"] = re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
                     summary[call]['basepath']= re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
             else:
+                print(f'sub found for {call}_{i}')
                 summaries[f'{call}_{i}']['subworkflowid'] = job["subWorkflowId"]
 
     return (summary,summaries)
@@ -187,12 +190,8 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
 
     for k,v in summary.items():
         callstat = ", ".join([ f'{stat}:{n}' for stat,n in v['jobstats'].items()])
-
         totaljobs= 0
-        print(k)
-        print(v)
         for stat, n in v['jobstats'].items():
-            print(stat)
             top_call_counts[k][stat]+=n
             totaljobs +=n
 
@@ -209,12 +208,12 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
             print_jobs_with_status(v[args.print_jobs_with_status],args.print_jobs_with_status, indent=indent)
 
         print("")
-
     for k,v in summaries.items():
         #callstat = ", ".join([ f'{stat}:{n}' for stat,n in v['jobstats'].items()])
         #print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else "sub-workflow" }\n{ind(indent)}job statuses\t {callstat}')
         #if args.failed_jobs:
         #    print_failed_jobs(v["failed_jobs"], indent=indent)
+
         if 'subworkflowid' in v:
             print(f'{ind(indent)}Sub-workflow ({v["subworkflowid"]}):')
             if expand_subs:
@@ -224,14 +223,14 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
                 for call,count in top.items():
                     if call in top_call_counts:
                         top_call_counts[call] = top_call_counts[call] + count
-                        summary[call]['failed_jobs'] = summary[call]['failed_jobs'].extend(summ[call]['failed_jobs'])
-                        summary[call][args.print_jobs_with_status] = summary[call][args.print_jobs_with_status].extend(summ[call][args.print_jobs_with_status])
+                        summary[call]['failed_jobs'].extend(summ[call]['failed_jobs'])
+                        summary[call][args.print_jobs_with_status].extend(summ[call][args.print_jobs_with_status])
                     else:
                         top_call_counts[call] = count
                         summary[call]['failed_jobs'] = summ[call]['failed_jobs']
                         summary[call][args.print_jobs_with_status] = summ[call][args.print_jobs_with_status]
 
-        return (top_call_counts,summary)
+    return (top_call_counts,summary)
 
 def get_failmsg(failure):
     while len(failure["causedBy"])>0:
