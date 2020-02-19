@@ -309,6 +309,7 @@ if __name__ == '__main__':
 
     parser_log = subparsers.add_parser('log', help='prints the log')
     parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
+    parser_log.add_argument("--kw", type= str,help="Search for keyword")
 
     args = parser.parse_args()
 
@@ -351,6 +352,8 @@ if __name__ == '__main__':
 
     if args.command == "log":
         with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
-            data = i.readlines()
+            data = [elem.strip() for elem in i.readlines()]
+        if args.kw:
+            data = [elem for elem in data if args.kw in elem]
         idx = min(args.n,len(data))
-        for line in data[-idx:]: print(line.strip())
+        for line in data[-idx:]: print(line)
