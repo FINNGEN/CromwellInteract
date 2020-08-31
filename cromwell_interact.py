@@ -107,6 +107,8 @@ def get_workflow_breakdown(jsondat):
     breakdown = defaultdict(lambda: [0, 0])
     for v in jsondat['calls'].values():
         for shard in v:
+            if 'executionEvents' not in shard:
+                continue
             for e in shard['executionEvents']:
                 if 'startTime' in e and 'endTime' in e and 'description' in e:
                     desc = e['description']
