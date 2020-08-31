@@ -48,25 +48,30 @@ def workflowstatus(jsondat):
 
 def get_workflow_failures(jsondat):
     return [ m["message"] for m in d["failures"][0].values() ]
-def get_metadata(id, port,timeout=60):
+def get_metadata(id, port,timeout=60, quiet=False):
     workflowID = id
 
     metadat = f"{os.path.join(tmpPath,workflowID +'.json')}"
-    with open(metadat ,'w') as o:
-        cmd1 = f'curl -X GET \"http://localhost/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+    if os.path.isfile(metadat):
+        if not quiet:
+            print(f"Using existing metadata file {metadat}")
+    else:
+        with open(metadat ,'w') as o:
+            cmd1 = f'curl -X GET \"http://localhost/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:{port}  '
 
-        # interim output looks ugly in case of sub workflows
-        #while True:
-        #    line=pr.stderr.read(1)
-        #    if line.decode("ASCII") == '' and pr.poll() != None:
-        #        break
-        #    sys.stdout.write(line.decode("ASCII"))
-        #    sys.stdout.flush()
-        pr = subprocess.run(shlex.split(cmd1), stdout=o, stderr=PIPE, encoding="ASCII", timeout=timeout)
-        if pr.returncode!=0:
-            print(pr.stderr)
-            raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
-        print(f"Metadata saved to {metadat}")
+            # interim output looks ugly in case of sub workflows
+            #while True:
+            #    line=pr.stderr.read(1)
+            #    if line.decode("ASCII") == '' and pr.poll() != None:
+            #        break
+            #    sys.stdout.write(line.decode("ASCII"))
+            #    sys.stdout.flush()
+            pr = subprocess.run(shlex.split(cmd1), stdout=o, stderr=PIPE, encoding="ASCII", timeout=timeout)
+            if pr.returncode!=0:
+                print(pr.stderr)
+                raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
+            if not quiet:
+                print(f"Metadata saved to {metadat}")
 
     ret = json.load(open(metadat,'r'))
     if ret['status']=='fail' :
@@ -98,6 +103,20 @@ def get_workflow_name(jsondat):
 def get_workflow_status(jsondat):
     return jsondat['status']
 
+def get_workflow_breakdown(jsondat):
+    breakdown = defaultdict(lambda: [0, 0])
+    for v in jsondat['calls'].values():
+        for shard in v:
+            for e in shard['executionEvents']:
+                if 'startTime' in e and 'endTime' in e and 'description' in e:
+                    desc = e['description']
+                    if desc.startswith('Pulling'):
+                        desc = 'Pulling image'
+                    elif desc.startswith('Worker ') and ' assigned ' in desc:
+                        desc = 'Worker assigned'
+                    breakdown[desc][0] = breakdown[desc][0] + (dateutil.parser.parse(e['endTime']) - dateutil.parser.parse(e['startTime'])).total_seconds() 
+                    breakdown[desc][1] = breakdown[desc][1] + 1
+    return breakdown
 
 def get_workflow_summary(jsondat, store_with_status=None):
     summaries = defaultdict( lambda: dict() )
@@ -232,6 +251,25 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
 
     return (top_call_counts,summary)
 
+def print_breakdown(metadat, args, port, indent=0, expand_subs=False, timeout=60):
+    print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
+    print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
+    times =get_workflow_exec_time(metadat)
+    print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
+    print("")
+
+    breakdown = get_workflow_breakdown(metadat)
+    if expand_subs:
+        for v in metadat['calls'].values():
+            for job in v:
+                if 'subWorkflowId' in job:
+                    sub_breakdown = get_workflow_breakdown(get_metadata(job['subWorkflowId'], port=port, timeout=timeout, quiet=True))
+                    for k,v_ in sub_breakdown.items():
+                        print(f'{ind(indent)}{metadat["id"]}\t{job["subWorkflowId"]}\t{k}\t{v_[0]}\t{v_[1]}')
+                    for k,v_ in sub_breakdown.items():
+                        breakdown[k][0] = breakdown[k][0] + v_[0]
+                        breakdown[k][1] = breakdown[k][1] + v_[1]
+
 def get_failmsg(failure):
     while len(failure["causedBy"])>0:
         failure = failure["causedBy"][0]
@@ -296,6 +334,7 @@ if __name__ == '__main__':
     parser_meta.add_argument("id", type= str,help="workflow id")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
+    parser_meta.add_argument("--breakdown", action="store_true"  ,help="Print execution event time breakdown of workflow")
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
@@ -336,6 +375,8 @@ if __name__ == '__main__':
 
                 print_failed_jobs(failures)
 
+        if args.breakdown:
+            print_breakdown(metadat, args=args, port=args.port, expand_subs=True, timeout=args.cromwell_timeout)
 
     elif args.command == "submit":
         if not args.inputs:
