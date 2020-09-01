@@ -103,6 +103,44 @@ def get_workflow_name(jsondat):
 def get_workflow_status(jsondat):
     return jsondat['status']
 
+def get_workflow_cost(jsondat):
+    # cost $/hour based on custom N2 machine prices in europe-west1-b on Aug 31st 2020 from https://cloud.google.com/compute/vm-instance-pricing
+    cost_od_cpu = 0.036489
+    cost_od_gib = 0.004892
+    cost_pe_cpu = 0.008828
+    cost_pe_gib = 0.001184
+    cost = 0
+    for v in jsondat['calls'].values():
+        for shard in v:
+            if 'jes' not in shard or 'executionEvents' not in shard:
+                continue
+            eventTime = defaultdict(lambda: 0)
+            for e in shard['executionEvents']:
+                if 'startTime' in e and 'endTime' in e and 'description' in e:
+                    desc = e['description']
+                    if (
+                        desc.startswith('Pulling') or
+                        desc == 'ContainerSetup' or
+                        (desc.startswith('Worker ') and ' assigned ' in desc) or
+                        desc == 'Worker released' or
+                        desc == 'UserAction' or
+                        desc == 'RunningJob' or
+                        desc == 'Localization' or
+                        desc == 'Delocalization'
+                    ):
+                        eventTime[desc] = eventTime[desc] + (dateutil.parser.parse(e['endTime']) - dateutil.parser.parse(e['startTime'])).total_seconds() / 3600
+            # when there's resource limit delay, there can be an extra RunningJob which we don't count
+            if 'UserAction' in eventTime and 'RunningJob' in eventTime:
+                eventTime['RunningJob'] = 0
+            machine = shard['jes']['machineType']
+            if not machine.startswith('custom'):
+                raise Exception(f'Cost for non-custom machine type not implemented. Machine type: {machine}')
+            cost_cpu = int(machine.split('-')[1]) * (cost_pe_cpu if shard['preemptible'] else cost_od_cpu)
+            cost_gib = int(machine.split('-')[2])/1024 * (cost_pe_gib if shard['preemptible'] else cost_od_gib)
+            for v in eventTime.values():
+                cost = cost + v * (cost_cpu + cost_gib)
+    return cost
+
 def get_workflow_breakdown(jsondat):
     breakdown = defaultdict(lambda: [0, 0])
     for v in jsondat['calls'].values():
@@ -261,6 +299,8 @@ def print_breakdown(metadat, args, port, indent=0, expand_subs=False, timeout=60
     print("")
 
     breakdown = get_workflow_breakdown(metadat)
+    for k,v_ in breakdown.items():
+        print(f'{ind(indent)}{metadat["id"]}\t{k}\t{v_[0]}\t{v_[1]}')
     if expand_subs:
         for v in metadat['calls'].values():
             for job in v:
@@ -271,6 +311,27 @@ def print_breakdown(metadat, args, port, indent=0, expand_subs=False, timeout=60
                     for k,v_ in sub_breakdown.items():
                         breakdown[k][0] = breakdown[k][0] + v_[0]
                         breakdown[k][1] = breakdown[k][1] + v_[1]
+
+def print_cost(metadat, args, port, indent=0, expand_subs=False, timeout=60):
+    print(f'{ind(indent)}Workflow cost approximation based on vCPU and RAM usage')
+    print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
+    print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
+    times =get_workflow_exec_time(metadat)
+    print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
+    cost = get_workflow_cost(metadat)
+    print(f'{ind(indent)}Cost $ \t{cost}')
+    print("")
+
+    if expand_subs:
+        total_cost = 0
+        for v in metadat['calls'].values():
+            for job in v:
+                if 'subWorkflowId' in job:
+                    sub_cost = get_workflow_cost(get_metadata(job['subWorkflowId'], port=port, timeout=timeout, quiet=True))
+                    print(f'{ind(indent)}{metadat["id"]}\t{job["subWorkflowId"]}\t{sub_cost}')
+                    total_cost = total_cost + sub_cost
+        if total_cost > 0:
+            print(f'{ind(indent)}Total cost $ \t{total_cost}')
 
 def get_failmsg(failure):
     while len(failure["causedBy"])>0:
@@ -337,6 +398,7 @@ if __name__ == '__main__':
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--breakdown", action="store_true"  ,help="Print execution event time breakdown of workflow")
+    parser_meta.add_argument("--cost", action="store_true"  ,help="Print workflow cost")
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
@@ -380,6 +442,9 @@ if __name__ == '__main__':
 
         if args.breakdown:
             print_breakdown(metadat, args=args, port=args.port, expand_subs=True, timeout=args.cromwell_timeout)
+
+        if args.cost:
+            print_cost(metadat, args=args, port=args.port, expand_subs=True, timeout=args.cromwell_timeout)
 
     elif args.command == "submit":
         if not args.inputs:
