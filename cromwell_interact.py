@@ -64,7 +64,9 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80)
 
         keys=""
         if minkeys:
-            keys="&includeKey=outputs&includeKey=status&includeKey=executionStatus&includeKey=failures&includeKey=workflowName"
+
+            keys=("&includeKey=outputs&includeKey=status&includeKey=executionStatus&includeKey=failures"
+                "&includeKey=workflowName&includeKey=start&includeKey=end&includeKey=stdout")
 
         cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
 
