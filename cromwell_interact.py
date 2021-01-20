@@ -11,16 +11,18 @@ tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
 import dateutil.parser
 
-def submit(wdlPath,inputPath,port,label = '', dependencies=None):
-
+def submit(wdlPath,inputPath,port,label = '', dependencies=None, options=None, http_port=80):
 
     print(f'submitting {wdlPath}')
-    cmd = (f'curl -X POST "http://localhost/api/workflows/v1" -H "accept: application/json" -H "Content-Type: multipart/form-data" '
+    cmd = (f'curl -X POST "http://localhost:{http_port}/api/workflows/v1" -H "accept: application/json" -H "Content-Type: multipart/form-data" '
            f' -F "workflowSource=@{wdlPath}" -F "workflowInputs=@{inputPath};type=application/json" --socks5 localhost:{port}'
           )
 
     if dependencies is not None:
         cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
+
+    if options is not None:
+        cmd = f'{cmd} -F \"workflowOptions=@{options};type=application/json"'
 
     #call(stringCMD)
     stringCMD = shlex.split(cmd)
@@ -48,20 +50,22 @@ def workflowstatus(jsondat):
 
 def get_workflow_failures(jsondat):
     return [ m["message"] for m in d["failures"][0].values() ]
-def get_metadata(id, port,timeout=60):
+
+def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
     workflowID = id
 
     metadat = f"{os.path.join(tmpPath,workflowID +'.json')}"
     with open(metadat ,'w') as o:
-        cmd1 = f'curl -X GET \"http://localhost/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+        excl_calls = ""
+        if nocalls:
+            excl_calls="&excludeKey=calls"
 
-        # interim output looks ugly in case of sub workflows
-        #while True:
-        #    line=pr.stderr.read(1)
-        #    if line.decode("ASCII") == '' and pr.poll() != None:
-        #        break
-        #    sys.stdout.write(line.decode("ASCII"))
-        #    sys.stdout.flush()
+        keys=""
+        if minkeys:
+            keys="&includeKey=outputs&includeKey=status&includeKey=executionStatus&includeKey=failures&includeKey=workflowName"
+
+        cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+
         pr = subprocess.run(shlex.split(cmd1), stdout=o, stderr=PIPE, encoding="ASCII", timeout=timeout)
         if pr.returncode!=0:
             print(pr.stderr)
@@ -168,13 +172,10 @@ def get_workflow_summary(jsondat, store_with_status=None):
 
     return (summary,summaries)
 
-
 def ind(n):
     return "\t".join([""]*(n+1))
 
-
 def get_jobs_with_status(jsondat, status):
-
     return [ v for (c,v) in jsondat["calls"].items() if v["executionStatus"]==status ]
 
 def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
@@ -184,7 +185,6 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
     times =get_workflow_exec_time(metadat)
     print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
     print("")
-
 
     top_call_counts = defaultdict(lambda :Counter())
 
@@ -209,16 +209,13 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
 
         print("")
     for k,v in summaries.items():
-        #callstat = ", ".join([ f'{stat}:{n}' for stat,n in v['jobstats'].items()])
-        #print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else "sub-workflow" }\n{ind(indent)}job statuses\t {callstat}')
-        #if args.failed_jobs:
-        #    print_failed_jobs(v["failed_jobs"], indent=indent)
 
         if 'subworkflowid' in v:
             print(f'{ind(indent)}Sub-workflow ({v["subworkflowid"]}):')
             if expand_subs:
                 print("getting sub data")
-                sub=get_metadata(v["subworkflowid"], port=port, timeout=timeout)
+                sub=get_metadata(v["subworkflowid"], port=port, timeout=timeout,
+                            nocalls=args.no_calls, minkeys=args.minkeys, http_port=args.http_port)
                 (top, summ) = print_summary(sub, args, port=port,indent=indent+1, expand_subs=expand_subs)
                 for call,count in top.items():
                     if call in top_call_counts:
@@ -254,22 +251,15 @@ def print_failed_jobs(joblist, indent=0):
         return
 
     for j in joblist:
-
         print(f'{ind(indent)}Failed\tshard# {j["shardIndex"]}')
         # nested caused bys in subworkflows
         fail_msgs = [ get_failmsg(f) for f in j["failures"] ]
-        #for f in j["failures"]:
-        #    while len(f["causedBy"])>0:
-        #        f=f["causedBy"]
-        #        print(f)
-        #        fail_msgs.append(f["message"])
-
         print("{}{}".format(ind(indent),"\n\n".join(fail_msgs)))
 
 
-def abort(workflowID, port):
+def abort(workflowID, port, http_port=80):
     #cmd1 = f'curl -X GET \"http://localhost/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:{port}  '
-    cmd1 = f'curl -X POST \"http://localhost/api/workflows/v1/{workflowID}/abort\" -H \"accept: application/json\" --socks5 localhost:{port}'
+    cmd1 = f'curl -X POST \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/abort\" -H \"accept: application/json\" --socks5 localhost:{port}'
     pr = subprocess.run(shlex.split(cmd1), stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='ASCII' )
     if pr.returncode!=0:
         print("Error occurred while submitting abort command to cromwell")
@@ -278,6 +268,17 @@ def abort(workflowID, port):
         #print(cmd1)
         print(json.loads(pr.stdout))
 
+def print_top_level_failure( metadat ):
+    def print_all_failures (fails):
+        if len(fails["causedBy"])==0:
+            print(fails["message"])
+            return
+        for cause in fails["causedBy"]:
+            print_all_failures(cause)
+
+    for f in metadat["failures"]:
+        print_all_failures(f)
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
@@ -285,17 +286,24 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
+    parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
     # submit parser
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
+    parser_submit.add_argument('--options', type=str, help='Workflow option json')
     # metadata parser
     parser_meta = subparsers.add_parser('metadata', help="Requests metadata and summaries of workflows")
     parser_meta.add_argument("id", type= str,help="workflow id")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
+
+    parser_meta.add_argument("--minkeys", action="store_true"  ,help="Print summary of workflow")
+
+    parser_meta.add_argument("--no_calls", action="store_true"
+            ,help="If don't get call level data. In this way failed jobs can be listed for a workflow with too many rows")
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
@@ -322,27 +330,34 @@ if __name__ == '__main__':
         if args.file:
             metadat=json.load(open(args.file))
         else:
-            metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout)
+            metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
+                        nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
 
         if args.summary or args.failed_jobs:
-            top_call_counts, summary = print_summary(metadat, args=args, port=args.port , expand_subs=True, timeout=args.cromwell_timeout )
+            top_call_counts, summary = print_summary(metadat, args=args, port=args.port ,
+                            expand_subs=True, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
             print("Total call statuses across subcalls:")
             print(callstat)
 
             if args.summarize_failed_jobs:
-                failures = []
-                for c, s in summary.items():
-                    failures.extend(s['failed_jobs'])
+                if not args.no_calls:
+                    failures = []
+                    for c, s in summary.items():
+                        failures.extend(s['failed_jobs'])
+                    print_failed_jobs(failures)
 
-                print_failed_jobs(failures)
+                if "failures" in metadat:
+                    print("print top level failures")
+                    print_top_level_failure(metadat)
 
 
     elif args.command == "submit":
         if not args.inputs:
             args.inputs = args.wdl.replace('.wdl','.json')
         print(args.wdl,args.inputs,args.label)
-        submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,label=args.label,dependencies= args.deps)
+        submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,label=args.label,dependencies= args.deps,
+            options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
         print("Trying to connect to server...")
