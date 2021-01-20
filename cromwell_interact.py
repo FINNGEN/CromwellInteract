@@ -25,7 +25,9 @@ def submit(wdlPath,inputPath,port,label = '', dependencies=None, options=None, h
         cmd = f'{cmd} -F \"workflowOptions=@{options};type=application/json"'
 
     #call(stringCMD)
+    print(cmd)
     stringCMD = shlex.split(cmd)
+
     proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     out, err = proc.communicate()
     exitcode = proc.returncode
@@ -268,6 +270,11 @@ def abort(workflowID, port, http_port=80):
         #print(cmd1)
         print(json.loads(pr.stdout))
 
+def get_last_job():
+    with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
+        for line in i:pass
+    return line.strip().split(' ')[2]
+
 def print_top_level_failure( metadat ):
     def print_all_failures (fails):
         if len(fails["causedBy"])==0:
@@ -281,6 +288,7 @@ def print_top_level_failure( metadat ):
 
 if __name__ == '__main__':
 
+    get_last_job()
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
 
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
@@ -295,15 +303,14 @@ if __name__ == '__main__':
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
     parser_submit.add_argument('--options', type=str, help='Workflow option json')
     # metadata parser
-    parser_meta = subparsers.add_parser('metadata', help="Requests metadata and summaries of workflows")
-    parser_meta.add_argument("id", type= str,help="workflow id")
+    parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
+    parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = get_last_job())
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
-    parser_meta.add_argument("--summary", action="store_true"  ,help="Print summary of workflow")
-
     parser_meta.add_argument("--minkeys", action="store_true"  ,help="Print summary of workflow")
-
     parser_meta.add_argument("--no_calls", action="store_true"
             ,help="If don't get call level data. In this way failed jobs can be listed for a workflow with too many rows")
+    parser_meta.add_argument("--summary",'-s', action="store_true"  ,help="Print summary of workflow")
+
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
@@ -326,7 +333,8 @@ if __name__ == '__main__':
 
     if args.command =='abort':
         abort(args.id, args.port)
-    elif args.command == "metadata":
+    elif args.command in ['metadata',"meta"]:
+        print(args.id)
         if args.file:
             metadat=json.load(open(args.file))
         else:
