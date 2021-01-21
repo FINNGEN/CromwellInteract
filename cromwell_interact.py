@@ -143,13 +143,13 @@ def get_workflow_summary(jsondat, store_with_status=None):
                 if summary[call]['min_time'] is None or duration < summary[call]['min_time']:
                     summary[call]['min_time'] = duration
                     if 'stdout' in job:
-                        summary[call]['min_job'] = job['stdout']
+                        summary[call]['min_job'] = job['stdout'] if 'stdout' in job else "shard:"+ str(job["shardIndex"])
 
                 if summary[call]['max_time'] is None or  duration > summary[call]['max_time']:
                     summary[call]['max_time'] = duration
 
-                    if 'stdout' in job:
-                        summary[call]['max_job'] = job['stdout']
+
+                    summary[call]['max_job'] = job['stdout'] if 'stdout' in job else "shard:"+ str(job["shardIndex"])
 
                 summary[call]['total_time']+=duration
 
