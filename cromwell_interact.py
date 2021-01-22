@@ -334,7 +334,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if not args.id: args.id = get_last_job()
        
     if args.outpath:
         rootPath=args.outpath + "/"
@@ -342,6 +341,7 @@ if __name__ == "__main__":
     if args.command =='abort':
         abort(args.id, args.port)
     elif args.command in ['metadata',"meta"]:
+        if not args.id: args.id = get_last_job()
         print(args.id)
         if args.file:
             metadat=json.load(open(args.file))
