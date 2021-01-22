@@ -272,7 +272,7 @@ def abort(workflowID, port, http_port=80):
         print(json.loads(pr.stdout))
 
 def get_last_job():
-<<<<<<< HEAD
+
     workflows = os.path.join(rootPath,'workflows.log')
     if not os.path.isfile(workflows):
         raise ValueError("NO WORKFLOWS DETECTED, PLEASE SPECIFY ID")
@@ -281,11 +281,6 @@ def get_last_job():
         with open(workflows,'rt') as i:
             for line in i:pass
         return line.strip().split(' ')[2]
-        
-=======
-    with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
-        for line in i:pass
-    return line.strip().split(' ')[2]
 
 def print_top_level_failure( metadat ):
     def print_all_failures (fails):
