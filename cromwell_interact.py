@@ -4,8 +4,7 @@ import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists
 from collections import defaultdict, Counter
-import re
-import sys
+import re,sys,warnings
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
@@ -281,13 +280,17 @@ def abort(workflowID, port):
         print(json.loads(pr.stdout))
 
 def get_last_job():
-    with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
-        for line in i:pass
-    return line.strip().split(' ')[2]
+    workflows = os.path.join(rootPath,'workflows.log')
+    if not os.path.isfile(workflows):
+        raise ValueError("NO WORKFLOWS DETECTED, PLEASE SPECIFY ID")
+
+    else:
+        with open(workflows,'rt') as i:
+            for line in i:pass
+        return line.strip().split(' ')[2]
         
 if __name__ == '__main__':
 
-    get_last_job()
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
 
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
@@ -301,7 +304,7 @@ if __name__ == '__main__':
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
-    parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = get_last_job())
+    parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = "")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--summary",'-s', action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
@@ -320,7 +323,10 @@ if __name__ == '__main__':
     parser_log.add_argument("--kw", type= str,help="Search for keyword")
 
     args = parser.parse_args()
-    
+
+    if not args.id:
+        args.id = get_last_job()
+        
     if args.outpath:
         rootPath=args.outpath + "/"
 
