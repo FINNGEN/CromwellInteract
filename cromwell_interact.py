@@ -293,16 +293,6 @@ def print_top_level_failure( metadat ):
     for f in metadat["failures"]:
         print_all_failures(f)
 
->>>>>>> 44ceb8a1940ddfc0d358c46ffd2b1e2fa4882598
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
-
-    subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
-    parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
-    parser.add_argument("--port", type=int, default=5000, help="SSH port")
-    parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
-    # submit parser
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
@@ -335,12 +325,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-<<<<<<< HEAD
-    if not args.id:
-        args.id = get_last_job()
-        
-=======
->>>>>>> 44ceb8a1940ddfc0d358c46ffd2b1e2fa4882598
+    if not args.id: args.id = get_last_job()
+       
     if args.outpath:
         rootPath=args.outpath + "/"
 
