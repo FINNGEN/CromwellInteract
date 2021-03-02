@@ -112,7 +112,7 @@ def get_workflow_cost(jsondat):
     cost = 0
     for v in jsondat['calls'].values():
         for shard in v:
-            if 'jes' not in shard or 'executionEvents' not in shard:
+            if 'jes' not in shard or 'machineType' not in shard['jes'] or 'executionEvents' not in shard:
                 continue
             eventTime = defaultdict(lambda: 0)
             for e in shard['executionEvents']:
@@ -356,6 +356,7 @@ def print_failed_jobs(joblist, indent=0):
 
     for j in joblist:
 
+        print(f'FAILED_SUBWORKFLOW {j["inputs"]["nullfile"]}')
         print(f'{ind(indent)}Failed\tshard# {j["shardIndex"]}')
         # nested caused bys in subworkflows
         fail_msgs = [ get_failmsg(f) for f in j["failures"] ]
@@ -428,7 +429,7 @@ if __name__ == '__main__':
             metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout)
 
         if args.summary or args.failed_jobs:
-            top_call_counts, summary = print_summary(metadat, args=args, port=args.port , expand_subs=True, timeout=args.cromwell_timeout )
+            top_call_counts, summary = print_summary(metadat, args=args, port=args.port , expand_subs=False, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
             print("Total call statuses across subcalls:")
             print(callstat)
