@@ -4,8 +4,7 @@ import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists
 from collections import defaultdict, Counter
-import re
-import sys
+import re,sys,warnings
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
@@ -276,9 +275,15 @@ def abort(workflowID, port, http_port=80):
         print(json.loads(pr.stdout))
 
 def get_last_job():
-    with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
-        for line in i:pass
-    return line.strip().split(' ')[2]
+
+    workflows = os.path.join(rootPath,'workflows.log')
+    if not os.path.isfile(workflows):
+        raise ValueError("NO WORKFLOWS DETECTED, PLEASE SPECIFY ID")
+
+    else:
+        with open(workflows,'rt') as i:
+            for line in i:pass
+        return line.strip().split(' ')[2]
 
 def print_top_level_failure( metadat ):
     def print_all_failures (fails):
@@ -291,18 +296,15 @@ def print_top_level_failure( metadat ):
     for f in metadat["failures"]:
         print_all_failures(f)
 
-if __name__ == '__main__':
 
-    get_last_job()
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
 
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
     parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
-
-    parser.add_argument("--project", type=str,help="Google cloud project to use.")
-    # submit parser
+    
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
@@ -311,7 +313,7 @@ if __name__ == '__main__':
     parser_submit.add_argument('--options', type=str, help='Workflow option json')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
-    parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = get_last_job())
+    parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = "")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--minkeys", action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--no_calls", action="store_true"
@@ -339,12 +341,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+
     if args.outpath:
         rootPath=args.outpath + "/"
 
     if args.command =='abort':
         abort(args.id, args.port)
     elif args.command in ['metadata',"meta"]:
+        if not args.id: args.id = get_last_job()
         print(args.id)
         if args.file:
             metadat=json.load(open(args.file))
