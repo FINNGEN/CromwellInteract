@@ -9,13 +9,17 @@ rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
 import dateutil.parser
+import requests
 
 def submit(wdlPath,inputPath,port,label = '', dependencies=None, options=None, http_port=80):
 
     print(f'submitting {wdlPath}')
-    cmd = (f'curl -X POST "http://localhost:{http_port}/api/workflows/v1" -H "accept: application/json" -H "Content-Type: multipart/form-data" '
-           f' -F "workflowSource=@{wdlPath}" -F "workflowInputs=@{inputPath};type=application/json" --socks5 localhost:{port}'
+    cmd = (f'curl -X POST http://localhost:{http_port}/api/workflows/v1 -H "accept: application/json" -H "Content-Type: multipart/form-data" '
+           f' -F workflowSource=@"{wdlPath}";type=application/json --socks5 localhost:{port}'
           )
+
+    if inputPath is not None:
+        cmd = f'{cmd} -F workflowInputs=@"{inputPath}"'
 
     if dependencies is not None:
         cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
@@ -63,7 +67,6 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80)
 
         keys=""
         if minkeys:
-
             keys=("&includeKey=outputs&includeKey=status&includeKey=executionStatus&includeKey=failures"
                 "&includeKey=workflowName&includeKey=start&includeKey=end&includeKey=stdout")
 
@@ -73,7 +76,7 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80)
         if pr.returncode!=0:
             print(pr.stderr)
             raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
-        print(f"Metadata saved to {metadat}")
+        print(f"Metadata saved to {metadat}", file=sys.stderr)
 
     ret = json.load(open(metadat,'r'))
     if ret['status']=='fail' :
@@ -296,7 +299,7 @@ def print_top_level_failure( metadat ):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
-    
+
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
@@ -321,6 +324,10 @@ if __name__ == "__main__":
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
     parser_meta.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
+
+    parser_out = subparsers.add_parser('outfiles', aliases = ['outfiles'],help="Prints out content of elems under ")
+    parser_out.add_argument("id",type= str,help="workflow id")
+    parser_out.add_argument("tag",type= str,help="what output tag to print id")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
@@ -334,7 +341,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-       
+
     if args.outpath:
         rootPath=args.outpath + "/"
 
@@ -369,8 +376,6 @@ if __name__ == "__main__":
 
 
     elif args.command == "submit":
-        if not args.inputs:
-            args.inputs = args.wdl.replace('.wdl','.json')
         print(args.wdl,args.inputs,args.label)
         submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,label=args.label,dependencies= args.deps,
             options=args.options, http_port=args.http_port)
@@ -380,6 +385,23 @@ if __name__ == "__main__":
         subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"',
                     shell=True, encoding="ASCII")
         print(f'Connection opened to {args.server} via localhost:{args.port}')
+
+    elif args.command == "outfiles":
+        metadat = get_metadata(args.id, port=args.port, timeout=60,
+                    minkeys=True,http_port=args.http_port)
+        tag = args.tag
+
+        def printfiles(lst):
+
+            for l in lst:
+                if isinstance(l,list):
+                    printfiles(l)
+                else:
+                    print(l)
+
+        printfiles(metadat["outputs"][tag])
+
+
 
     if args.command == "log":
         with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
