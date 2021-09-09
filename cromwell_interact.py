@@ -68,6 +68,7 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80)
                 "&includeKey=workflowName&includeKey=start&includeKey=end&includeKey=stdout")
 
         cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+        print(cmd1)
 
         pr = subprocess.run(shlex.split(cmd1), stdout=o, stderr=PIPE, encoding="ASCII", timeout=timeout)
         if pr.returncode!=0:
@@ -293,15 +294,27 @@ def print_top_level_failure( metadat ):
     for f in metadat["failures"]:
         print_all_failures(f)
 
+def get_status(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
+    workflowID = id
+    cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/status\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+    print(cmd1)
+
+    pr = subprocess.run(shlex.split(cmd1), stderr=PIPE, encoding="ASCII", timeout=timeout)
+    if pr.returncode!=0:
+        print(pr.stderr)
+        raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
+
+
+    print(pr)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
-    
+
     subparsers = parser.add_subparsers(help='help for subcommand',dest ="command")
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
     parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
-    
+
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
@@ -316,7 +329,7 @@ if __name__ == "__main__":
     parser_meta.add_argument("--no_calls", action="store_true"
             ,help="If don't get call level data. In this way failed jobs can be listed for a workflow with too many rows")
     parser_meta.add_argument("--summary",'-s', action="store_true"  ,help="Print summary of workflow")
-
+    parser_meta.add_argument("--running",'-r', action="store_true"  ,help="Print whether it's running or not")
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
@@ -334,22 +347,28 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-       
+
     if args.outpath:
         rootPath=args.outpath + "/"
 
     if args.command =='abort':
         abort(args.id, args.port)
+
     elif args.command in ['metadata',"meta"]:
         if not args.id: args.id = get_last_job()
         print(args.id)
-        if args.file:
-            metadat=json.load(open(args.file))
-        else:
-            metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
-                        nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
+
+        if args.running:
+            get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
+            args.summary = args.failed_jobs = False
 
         if args.summary or args.failed_jobs:
+            if args.file:
+                metadat=json.load(open(args.file))
+            else:
+                metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
+                            nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
+
             top_call_counts, summary = print_summary(metadat, args=args, port=args.port ,
                             expand_subs=True, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
