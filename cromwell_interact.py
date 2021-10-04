@@ -23,8 +23,19 @@ def submit(wdlPath,inputPath,port,label = '', google_labels="", dependencies=Non
 
     labs = { labs[0]:labs[1] for labs in [ l.split("=") for l in google_labels.split(",") ] }
 
-    if "product" not in labs:
-        raise Exception("You must add product google label!!!!!!")
+    wf_opts = {"google_labels":labs}
+
+    if options is not None:
+        wf_opts = json.load(open(options,'r'))
+        #cmd = f'{cmd} -F \"workflowOptions=@{options};type=application/json"'
+        for k,v in labs.items():
+            ## override from command line
+            print(f'overriding {k}')
+            wf_opts["google_labels"][k] = v
+
+
+    if "product" not in wf_opts["google_labels"]:
+        raise Exception("You must add product google label with --l product=value or --options json")
 
     workflowname=""
     with open(wdlPath, 'r')  as wd:
@@ -35,12 +46,13 @@ def submit(wdlPath,inputPath,port,label = '', google_labels="", dependencies=Non
                 break
 
     user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
-    labs["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")
-    labs["cromwell-workflow-name"]=workflowname
+    wf_opts["google_labels"]["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")
+    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname
+
 
     cmd = (f'curl -X POST http://localhost:{http_port}/api/workflows/v1 -H "accept: application/json" -H "Content-Type: multipart/form-data" '
            f' -F workflowSource=@"{wdlPath}";type=application/json --socks5 localhost:{port}'
-           f' -F workflowOptions=\'{json.dumps({"google_labels":labs})}\''
+           f' -F workflowOptions=\'{json.dumps(wf_opts)}\''
           )
 
     if inputPath is not None:
@@ -49,8 +61,7 @@ def submit(wdlPath,inputPath,port,label = '', google_labels="", dependencies=Non
     if dependencies is not None:
         cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
 
-    if options is not None:
-        cmd = f'{cmd} -F \"workflowOptions=@{options};type=application/json"'
+
 
     stringCMD = shlex.split(cmd)
 
