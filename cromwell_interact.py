@@ -10,12 +10,37 @@ tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
 import dateutil.parser
 import requests
+import json
+import re
 
-def submit(wdlPath,inputPath,port,label = '', dependencies=None, options=None, http_port=80):
+def submit(wdlPath,inputPath,port,label = '', google_labels="", dependencies=None, options=None, http_port=80):
 
     print(f'submitting {wdlPath}')
+    ## force labeling:
+
+    if not google_labels:
+        raise Exception("You must add product google label!!!!!!")
+
+    labs = { labs[0]:labs[1] for labs in [ l.split("=") for l in google_labels.split(",") ] }
+
+    if "product" not in labs:
+        raise Exception("You must add product google label!!!!!!")
+
+    workflowname=""
+    with open(wdlPath, 'r')  as wd:
+        for l in wd:
+            l=l.strip()
+            if l.startswith("workflow"):
+                workflowname=re.search('^workflow[ ]+([A-Za-z]+)',l).group(1)
+                break
+
+    user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
+    labs["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")
+    labs["cromwell-workflow-name"]=workflowname
+
     cmd = (f'curl -X POST http://localhost:{http_port}/api/workflows/v1 -H "accept: application/json" -H "Content-Type: multipart/form-data" '
            f' -F workflowSource=@"{wdlPath}";type=application/json --socks5 localhost:{port}'
+           f' -F workflowOptions=\'{json.dumps({"google_labels":labs})}\''
           )
 
     if inputPath is not None:
@@ -27,8 +52,6 @@ def submit(wdlPath,inputPath,port,label = '', dependencies=None, options=None, h
     if options is not None:
         cmd = f'{cmd} -F \"workflowOptions=@{options};type=application/json"'
 
-    #call(stringCMD)
-    print(cmd)
     stringCMD = shlex.split(cmd)
 
     proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -67,11 +90,11 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80)
 
         keys=""
         if minkeys:
-            keys=("&includeKey=outputs&includeKey=status&includeKey=executionStatus&includeKey=failures"
-                "&includeKey=workflowName&includeKey=start&includeKey=end&includeKey=stdout")
+            keys=("&includeKey=status&includeKey=executionStatus&includeKey=failures&includeKey=workflowName")
+                #"&includeKey=start&includeKey=end")
 
         cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
-
+        print(cmd1)
         pr = subprocess.run(shlex.split(cmd1), stdout=o, stderr=PIPE, encoding="ASCII", timeout=timeout)
         if pr.returncode!=0:
             print(pr.stderr)
@@ -304,13 +327,14 @@ if __name__ == "__main__":
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
     parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
-    
+
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
     parser_submit.add_argument('--options', type=str, help='Workflow option json')
+    parser_submit.add_argument('--google_labels', '--l', type=str, help='Labels (comma separated key=value list) of the workflow for google. Must contain product at minimum.')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
     parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = "")
@@ -377,7 +401,8 @@ if __name__ == "__main__":
 
     elif args.command == "submit":
         print(args.wdl,args.inputs,args.label)
-        submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,label=args.label,dependencies= args.deps,
+        submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,label=args.label, google_labels=args.google_labels,
+        dependencies= args.deps,
             options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
