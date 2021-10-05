@@ -20,11 +20,8 @@ def process_labels(args):
         wf_opts = {"google_labels":labs}
 
     if args.options:
-        wf_opts = json.load(open(options,'r'))
-        for k,v in labs.items():
-            ## override from command line
-            print(f'overriding {k}')
-            wf_opts["google_labels"][k] = v
+        wf_opts = json.load(open(args.options,'r'))
+    
 
     if "product" not in wf_opts["google_labels"]:
         raise Exception("You must add product google label with --l product=value or --options json")
