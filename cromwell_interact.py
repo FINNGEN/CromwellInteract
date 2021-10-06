@@ -13,7 +13,10 @@ import requests
 import json
 import re
 
-def process_labels(args):
+def process_inputs(args):
+
+    if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
+
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
         labs = { labs[0]:labs[1] for labs in [ l.split("=") for l in args.google_labels.split(",") ] }
@@ -21,7 +24,7 @@ def process_labels(args):
 
     if args.options:
         wf_opts = json.load(open(args.options,'r'))
-    
+
 
     if "product" not in wf_opts["google_labels"]:
         raise Exception("You must add product google label with --l product=value or --options json")
@@ -432,14 +435,11 @@ if __name__ == "__main__":
 
 
     elif args.command == "submit":
-        if not args.inputs:
-            args.inputs = args.wdl.replace('.wdl','.json')
 
-        wf_opts = process_labels(args)
-        print(args.wdl,args.inputs,args.label)
+        wf_opts = process_inputs(args)
+        print(args.wdl,args.inputs,args.label,wf_opts)
         submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,wf_opts = wf_opts,label=args.label,
-        dependencies= args.deps,
-            options=args.options, http_port=args.http_port)
+        dependencies= args.deps, options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
         print("Trying to connect to server...")
