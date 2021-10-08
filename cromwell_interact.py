@@ -13,29 +13,28 @@ import requests
 import json
 import re
 
-def submit(wdlPath,inputPath,port,label = '', google_labels="", dependencies=None, options=None, http_port=80):
+def process_inputs(args):
 
-    print(f'submitting {wdlPath}')
-    ## force labeling:
+    if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
 
-    if not google_labels:
-        raise Exception("You must add product google label!!!!!!")
+    # labels and options are now mutually exclusive by structure
+    if args.google_labels:
+        labs = { labs[0]:labs[1] for labs in [ l.split("=") for l in args.google_labels.split(",") ] }
+        wf_opts = {"google_labels":labs}
 
-    labs = { labs[0]:labs[1] for labs in [ l.split("=") for l in google_labels.split(",") ] }
-
-    wf_opts = {"google_labels":labs}
-
-    if options is not None:
-        wf_opts = json.load(open(options,'r'))
-        #cmd = f'{cmd} -F \"workflowOptions=@{options};type=application/json"'
-        for k,v in labs.items():
-            ## override from command line
-            print(f'overriding {k}')
-            wf_opts["google_labels"][k] = v
+    if args.options:
+        wf_opts = json.load(open(args.options,'r'))
 
 
     if "product" not in wf_opts["google_labels"]:
         raise Exception("You must add product google label with --l product=value or --options json")
+
+    return wf_opts
+
+def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options=None, http_port=80):
+
+    print(f'submitting {wdlPath}')
+    ## force labeling:
 
     workflowname=""
     with open(wdlPath, 'r')  as wd:
@@ -344,6 +343,10 @@ def get_status(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
 
     print(pr)
 
+
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
 
@@ -357,8 +360,10 @@ if __name__ == "__main__":
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
-    parser_submit.add_argument('--options', type=str, help='Workflow option json')
-    parser_submit.add_argument('--google_labels', '--l', type=str, help='Labels (comma separated key=value list) of the workflow for google. Must contain product at minimum.')
+
+    label_options = parser_submit.add_mutually_exclusive_group(required=True)
+    label_options.add_argument('--options', type=str, help='Workflow option json')
+    label_options.add_argument('--google_labels', '--l', type=str, help='Labels (comma separated key=value list) of the workflow for google. Must contain product at minimum.')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
     parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = "")
@@ -430,10 +435,11 @@ if __name__ == "__main__":
 
 
     elif args.command == "submit":
-        print(args.wdl,args.inputs,args.label)
-        submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,label=args.label, google_labels=args.google_labels,
-        dependencies= args.deps,
-            options=args.options, http_port=args.http_port)
+
+        wf_opts = process_inputs(args)
+        print(args.wdl,args.inputs,args.label,wf_opts)
+        submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,wf_opts = wf_opts,label=args.label,
+        dependencies= args.deps, options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
         print("Trying to connect to server...")
