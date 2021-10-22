@@ -355,7 +355,11 @@ def update_log(args,id,status):
             if w_id == id:
                 if len(line) ==4:
                     line.append(status)
-
+                elif len(line) == 5:
+                    line[4] = status
+                elif len(line) ==3:
+                    line.append(name)
+                    line.append(status)
             new_lines.append(line)
     with open(args.workflow_log,'wt') as o:
         for line in new_lines:
