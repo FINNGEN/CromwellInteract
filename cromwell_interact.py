@@ -17,6 +17,7 @@ def process_inputs(args):
 
     if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
 
+
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
         labs = { labs[0]:labs[1].lower().replace("_", "-") for labs in [ l.split("=") for l in args.google_labels.split(",") ] }
@@ -24,6 +25,10 @@ def process_inputs(args):
 
     if args.options:
         wf_opts = json.load(open(args.options,'r'))
+
+    #monitoring by monitoring script
+    if not args.disable_monitoring:
+        wf_opts["monitoring_script"]="gs://fg-analysis-public-resources/monitor_script.sh"
 
 
     if "product" not in wf_opts["google_labels"]:
@@ -380,6 +385,7 @@ if __name__ == "__main__":
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
+    parser_submit.add_argument('--disable-monitoring',action="store_true",help='Disable task monitoring')
 
     label_options = parser_submit.add_mutually_exclusive_group(required=True)
     label_options.add_argument('--options', type=str, help='Workflow option json')
