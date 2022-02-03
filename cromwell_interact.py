@@ -28,7 +28,7 @@ def process_inputs(args):
 
     #monitoring by monitoring script
     if not args.disable_monitoring:
-        wf_opts["monitoring_script"]="gs://fg-analysis-public-resources/monitor_script.sh"
+        wf_opts["monitoring_script"]=args.monitor
 
 
     if "product" not in wf_opts["google_labels"]:
@@ -365,6 +365,7 @@ if __name__ == "__main__":
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
+    parser_submit.add_argument('--monitor',type=str,default="gs://fg-analysis-public-resources/monitor_script.sh",help="give custom monitoring script path in cloud")
     parser_submit.add_argument('--disable-monitoring',action="store_true",help='Disable task monitoring')
 
     label_options = parser_submit.add_mutually_exclusive_group(required=True)

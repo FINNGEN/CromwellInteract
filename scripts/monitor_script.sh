@@ -14,7 +14,7 @@ DELAY=5
 echo "#CPU count: $CPUCNT"
 echo "#IO usage in MB/s"
 echo "#Memory usage in GB"
-printf '%-s\t%-s\t%-s\t%-s\t%-s\t%-s\t%-s\n' "Time" "Memtotal" "MemUsed"  "DiskR" "DiskW"  "CPU" "CPUWaitIO"
+printf '%-s\t%-s\t%-s\t%-s\t%-s\t%-s\t%-s\t%-s\n' "Time" "Memtotal" "MemUsed" "DiskFree" "DiskR" "DiskW"  "CPU" "CPUWaitIO"
 while :
 do
   NOW=$(date +%s)
@@ -40,13 +40,15 @@ do
   #disk usage in MB/s
   DISKR=$(awk -v d=$DELAY -v n=$NEW_DISK_READ -v o=$OLD_DISK_READ -v b=$BLCKSIZE 'BEGIN{printf "%.2f", b*(n-o)/(1024*1024*d)}')
   DISKW=$(awk -v d=$DELAY -v n=$NEW_DISK_WRITE -v o=$OLD_DISK_WRITE -v b=$BLCKSIZE 'BEGIN{printf "%.2f", b*(n-o)/(1024*1024*d)}')
+  
+  DISKFREE=$(df -h |grep "/cromwell_root"|tr -s " "|awk '{print $4}')
   #update old values
   OLD_DISK_READ=$NEW_DISK_READ
   OLD_DISK_WRITE=$NEW_DISK_WRITE
   OLD_CPU_TOTAL=$CPU_TOTAL
   OLD_CPU_USED=$CPU_USED
   OLD_CPU_IO=$CPU_IO
-  printf '%-s\t%-s\t%-s\t%-s\t%-s\t%s%%\t%s%%\n' "$DATE" "$MEMTOTAL" "$MEMUSED"  "$DISKR" "$DISKW" "$CPU" "$CPUIO"
+  printf '%-s\t%-s\t%-s\t%-s\t%-s\t%-s\t%s%%\t%s%%\n' "$DATE" "$MEMTOTAL" "$MEMUSED" "$DISKFREE" "$DISKR" "$DISKW" "$CPU" "$CPUIO"
   #sleep until measurement start + DELAY, so that measurement drift is not so bad
   #kinda overkill, but eh
   NOW_2=$(date +%s)
