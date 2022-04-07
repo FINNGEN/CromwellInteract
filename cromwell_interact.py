@@ -492,9 +492,11 @@ if __name__ == "__main__":
             metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
                         minkeys=False, http_port=args.http_port, nocalls=False)
         outs = metadat["outputs"]
+        status = metadat['status']
+        update_log(args, args.id, status)
 
         if not outs.keys():
-            raise Exception(f'No outputs found for {args.id}. Is the job finished?')
+            raise Exception(f'No outputs found for {args.id}. Job status: {status}')
 
         if not args.tag:
             keys = sorted(set(list(outs.keys())))
