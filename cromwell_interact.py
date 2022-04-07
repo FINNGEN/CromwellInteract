@@ -365,6 +365,17 @@ def update_log(args,id,status):
         for line in new_lines:
             o.write(' '.join(line) + '\n')
 
+def flatten(A):
+    rt = []
+    for i in A:
+        if isinstance(i,list):
+            rt.extend(flatten(i))
+        else:
+            rt.append(i)
+    return rt
+
+
+
 
 
 if __name__ == "__main__":
@@ -398,9 +409,12 @@ if __name__ == "__main__":
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
     parser_meta.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
 
-    parser_out = subparsers.add_parser('outfiles', aliases = ['outfiles'],help="Prints out content of elems under ")
-    parser_out.add_argument("id",type= str,help="workflow id")
-    parser_out.add_argument("tag",type= str,help="what output tag to print id")
+    parser_out = subparsers.add_parser('outfiles', aliases = ['out'], help="Prints out content of elems under ")
+    parser_out.add_argument("id", nargs='?',type= str, help="workflow id")
+    parser_out.add_argument("--file", type=str, help="Use already downloaded meta json file as data")
+    parser_out.add_argument("--tag",type= str, help="what output tag to print id")
+    parser_out.add_argument("--cromwell_timeout", type=int, default=60, help="Time in seconds to wait for response from cromwell")
+
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
@@ -469,20 +483,35 @@ if __name__ == "__main__":
                     shell=True, encoding="ASCII")
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
-    elif args.command == "outfiles":
-        metadat = get_metadata(args.id, port=args.port, timeout=60,
-                    minkeys=True,http_port=args.http_port)
-        tag = args.tag
+    elif args.command in ["outfiles", "out"]:
+        if not args.id: args.id = get_last_job()
 
-        def printfiles(lst):
+        if args.file:
+            metadat=json.load(open(args.file))
+        else:
+            metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
+                        minkeys=False, http_port=args.http_port, nocalls=False)
+        outs = metadat["outputs"]
 
-            for l in lst:
-                if isinstance(l,list):
-                    printfiles(l)
-                else:
-                    print(l)
+        if not outs.keys():
+            raise Exception(f'No outputs found for {args.id}. Is the job finished?')
 
-        printfiles(metadat["outputs"][tag])
+        if not args.tag:
+            keys = sorted(set(list(outs.keys())))
+        else:
+            keys = [args.tag]
+
+        for key in keys:
+            out = outs[key]
+            if isinstance(out,str):
+                tmp = [out]
+            else:
+                tmp = flatten(out)
+            fname = os.path.join(args.id + '.' + key)
+            with open(fname, "w") as f:
+                for line in tmp:
+                    f.write(f"{line}\n")
+                print(f"Output saved to {fname}", file=sys.stderr)
 
 
 
