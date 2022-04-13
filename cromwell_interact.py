@@ -2,7 +2,7 @@
 from subprocess import Popen,PIPE,call,run
 import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
-from utils import make_sure_path_exists
+from utils import make_sure_path_exists, flatten
 from collections import defaultdict, Counter
 import re,sys,warnings
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
@@ -364,16 +364,6 @@ def update_log(args,id,status):
     with open(args.workflow_log,'wt') as o:
         for line in new_lines:
             o.write(' '.join(line) + '\n')
-
-def flatten(A):
-    rt = []
-    for i in A:
-        if isinstance(i,list):
-            rt.extend(flatten(i))
-        else:
-            rt.append(i)
-    return rt
-
 
 
 
