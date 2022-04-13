@@ -19,7 +19,7 @@ def process_inputs(args):
 
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
-        labs = { labs[0]:labs[1] for labs in [ l.split("=") for l in args.google_labels.split(",") ] }
+        labs = { labs[0]:labs[1].lower().replace("_", "-") for labs in [ l.split("=") for l in args.google_labels.split(",") ] }
         wf_opts = {"google_labels":labs}
 
     if args.options:
