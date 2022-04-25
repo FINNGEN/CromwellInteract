@@ -495,7 +495,7 @@ if __name__ == "__main__":
 
         for key in keys:
             out = outs[key]
-            if isinstance(out,str):
+            if not isinstance(out,list):
                 tmp = [out]
             else:
                 tmp = flatten(out)
