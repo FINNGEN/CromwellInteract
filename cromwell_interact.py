@@ -81,7 +81,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     if not label:label = wdl_name
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
-        o.write(' '.join([current_date,wdl_name,jobID,label]) + '\n')
+        o.write(' '.join([current_date,wdl_name,jobID,label,resp['status']]) + '\n')
 
 
 def workflowstatus(jsondat):
