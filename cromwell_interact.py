@@ -4,14 +4,14 @@ import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
 from utils import make_sure_path_exists, flatten
 from collections import defaultdict, Counter
-import re,sys,warnings
+import re,sys
+import dateutil.parser
+import json
+import re
+
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
-import dateutil.parser
-import requests
-import json
-import re
 
 def process_inputs(args):
 
