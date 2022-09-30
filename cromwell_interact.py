@@ -81,7 +81,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     if not label:label = wdl_name
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
-        o.write(' '.join([current_date,wdl_name,jobID,label,resp['status']]) + '\n')
+        o.write('\t'.join([current_date,wdl_name,jobID,label,resp['status']]) + '\n')
 
 
 def workflowstatus(jsondat):
@@ -362,7 +362,7 @@ def update_log(args,id,status):
             new_lines.append(line)
     with open(args.workflow_log,'wt') as o:
         for line in new_lines:
-            o.write(' '.join(line) + '\n')
+            o.write('\t'.join(line) + '\n')
 
 
 
