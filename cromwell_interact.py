@@ -77,7 +77,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     print(jobID)
     pyperclip.copy(jobID)
 
-    current_date = datetime.datetime.today().strftime('%Y-%m-%d')
+    current_date = datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     if not label:label = wdl_name
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
