@@ -317,7 +317,7 @@ def get_last_job():
     else:
         with open(workflows,'rt') as i:
             for line in i:pass
-        return line.strip().split(' ')[2]
+        return line.strip().split('\t')[2]
 
 def print_top_level_failure( metadat ):
     def print_all_failures (fails):
@@ -347,7 +347,7 @@ def get_status(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
 
 def update_log(args,id,status):
     with open(args.workflow_log, "r+") as f:
-        old = [elem.strip().split(" ") for elem in f.readlines()] # read everything in the file
+        old = [elem.strip().split("\t") for elem in f.readlines()] # read everything in the file
         new_lines = []
         for line in old:
             date,name,w_id,*_ = line
