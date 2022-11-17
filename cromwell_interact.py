@@ -432,7 +432,7 @@ if __name__ == "__main__":
 
     if args.command =='abort':
         abort(args.id, args.port)
-        update_log(args,args.id,'Aborted')
+        update_log(args,args.id,'Aborting')
 
     elif args.command in ['metadata',"meta"]:
         if not args.id: args.id = get_last_job()
