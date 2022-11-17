@@ -435,8 +435,9 @@ if __name__ == "__main__":
         update_log(args,args.id,'Aborting')
 
     elif args.command in ['metadata',"meta"]:
-        if not args.id: args.id = get_last_job()
-        print(args.id)
+        if not args.id:
+            args.id = get_last_job()
+            print(args.id)
 
         if args.running:
             status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
