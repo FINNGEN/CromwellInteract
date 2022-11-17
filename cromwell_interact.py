@@ -523,6 +523,6 @@ if __name__ == "__main__":
         if args.kw:
             data = [elem for elem in data if args.kw in elem]
         if args.running:
-            data = [elem for elem in data if elem.split('\t')[-1] == 'Running']
+            data = [elem for elem in data if elem.split('\t')[-1] in ['Running', 'Submitted']]
         idx = min(args.n,len(data))
         for line in data[-idx:]: print(line)
