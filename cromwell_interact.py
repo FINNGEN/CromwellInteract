@@ -379,6 +379,7 @@ if __name__ == "__main__":
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
     parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
+    parser.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
 
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
@@ -403,13 +404,11 @@ if __name__ == "__main__":
     parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
-    parser_meta.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
 
     parser_out = subparsers.add_parser('outfiles', aliases = ['out'], help="Prints out content of elems under ")
     parser_out.add_argument("id", nargs='?',type= str, help="workflow id")
     parser_out.add_argument("--file", type=str, help="Use already downloaded meta json file as data")
     parser_out.add_argument("--tag",type= str, help="what output tag to print id")
-    parser_out.add_argument("--cromwell_timeout", type=int, default=60, help="Time in seconds to wait for response from cromwell")
 
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
@@ -423,6 +422,13 @@ if __name__ == "__main__":
     parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
     parser_log.add_argument("--kw", type= str,help="Search for keyword")
     parser_log.add_argument("--running", '-r', action="store_true", help="Print only jobs with status=='Running'")
+
+    # add parser
+    parser_add = subparsers.add_parser("add", help="manually add cromwell entry to log")
+    parser_add.add_argument("id", type=str, help="Workflow id")
+    parser_add.add_argument("--name", "-n", type=str, required=True, help="Workflow name")
+    parser_add.add_argument("--label", "-l", type=str, required=False, help="Workflow label")
+    parser_add.add_argument("--time", "-t", type=str, required=False, help="Submission time (YYYY-MM-DD hh:mm:ss)")
 
     args = parser.parse_args()
     args.workflow_log = os.path.join(rootPath,'workflows.log')
@@ -516,9 +522,7 @@ if __name__ == "__main__":
                     f.write(f"{line}\n")
                 print(f"Output saved to {fname}", file=sys.stderr)
 
-
-
-    if args.command == "log":
+    elif args.command == "log":
         with open(args.workflow_log,'rt') as i:
             data = [elem.strip() for elem in i.readlines()]
         if args.kw:
@@ -527,3 +531,12 @@ if __name__ == "__main__":
             data = [elem for elem in data if elem.split('\t')[-1] in ['Running', 'Submitted', 'Aborting']]
         idx = min(args.n,len(data))
         for line in data[-idx:]: print(line)
+    
+    elif args.command == "add":
+        status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout, http_port=args.http_port)
+        if status != 'fail':
+            time = args.time if args.time else datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+            label = args.label if args.label else args.name
+            with open(os.path.join(rootPath,'workflows.log'),'a') as o:
+                o.write('\t'.join([time, args.name, args.id, label, status]) + '\n')
+            print(f'Added {args.id} to log.')
