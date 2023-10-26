@@ -497,7 +497,7 @@ if __name__ == "__main__":
             metadat=json.load(open(args.file))
         else:
             metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
-                        minkeys=False, http_port=args.http_port, nocalls=False)
+                        minkeys=False, http_port=args.http_port, nocalls=True)
         outs = metadat["outputs"]
         status = metadat['status']
         update_log(args, args.id, status)
