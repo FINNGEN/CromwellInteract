@@ -17,7 +17,6 @@ def process_inputs(args):
 
     if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
 
-
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
         labs = { labs[0]:labs[1].lower().replace("_", "-") for labs in [ l.split("=") for l in args.google_labels.split(",") ] }
@@ -29,7 +28,6 @@ def process_inputs(args):
     #monitoring by monitoring script
     if not args.disable_monitoring:
         wf_opts["monitoring_script"]=args.monitor
-
 
     if "product" not in wf_opts["google_labels"]:
         raise Exception("You must add product google label with --l product=value or --options json")
@@ -65,8 +63,6 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     if dependencies is not None:
         cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
 
-
-
     stringCMD = shlex.split(cmd)
 
     proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -87,13 +83,6 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     if not label:label = wdl_name
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
         o.write('\t'.join([current_date,wdl_name,jobID,label,resp['status']]) + '\n')
-
-
-def workflowstatus(jsondat):
-    return jsondat["status"]
-
-def get_workflow_failures(jsondat):
-    return [ m["message"] for m in d["failures"][0].values() ]
 
 def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
     workflowID = id
@@ -151,7 +140,6 @@ def get_workflow_status(jsondat):
 def get_workflow_summary(jsondat, store_with_status=None):
     summaries = defaultdict( lambda: dict() )
     summary= defaultdict(lambda: dict())
-    paths = {}
 
     for call,v in jsondat["calls"].items():
         uniq_shards={}
@@ -188,8 +176,6 @@ def get_workflow_summary(jsondat, store_with_status=None):
 
                 if summary[call]['max_time'] is None or  duration > summary[call]['max_time']:
                     summary[call]['max_time'] = duration
-
-
                     summary[call]['max_job'] = job['stdout'] if 'stdout' in job else "shard:"+ str(job["shardIndex"])
 
                 summary[call]['total_time']+=duration
@@ -201,7 +187,6 @@ def get_workflow_summary(jsondat, store_with_status=None):
                 summary[call]['failed_jobs'].append(job)
 
             if job["executionStatus"]==store_with_status:
-
                 summaries[f'{call}_{i}'][store_with_status].append(job)
                 summary[call][store_with_status].append(job)
 
@@ -227,7 +212,7 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
     summary,summaries = get_workflow_summary(metadat, args.print_jobs_with_status)
     print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
     print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
-    times =get_workflow_exec_time(metadat)
+    times = get_workflow_exec_time(metadat)
     print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
     print("")
 
@@ -253,8 +238,8 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
             print_jobs_with_status(v[args.print_jobs_with_status],args.print_jobs_with_status, indent=indent)
 
         print("")
+    
     for k,v in summaries.items():
-
         if 'subworkflowid' in v:
             print(f'{ind(indent)}Sub-workflow ({v["subworkflowid"]}):')
             if expand_subs:
@@ -301,7 +286,6 @@ def print_failed_jobs(joblist, indent=0):
         fail_msgs = [ get_failmsg(f) for f in j["failures"] ]
         print("{}{}".format(ind(indent),"\n\n".join(fail_msgs)))
 
-
 def abort(workflowID, port, http_port=80):
     #cmd1 = f'curl -X GET \"http://localhost/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false\" -H \"accept: application/json\" --socks5 localhost:{port}  '
     cmd1 = f'curl -X POST \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/abort\" -H \"accept: application/json\" --socks5 localhost:{port}'
@@ -314,11 +298,9 @@ def abort(workflowID, port, http_port=80):
         print(json.loads(pr.stdout))
 
 def get_last_job():
-
     workflows = os.path.join(rootPath,'workflows.log')
     if not os.path.isfile(workflows):
         raise ValueError("NO WORKFLOWS DETECTED, PLEASE SPECIFY ID")
-
     else:
         with open(workflows,'rt') as i:
             for line in i:pass
@@ -370,8 +352,6 @@ def update_log(args,id,status):
             o.write('\t'.join(line) + '\n')
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
 
@@ -381,6 +361,7 @@ if __name__ == "__main__":
     parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
     parser.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
 
+    # submit parser
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
     parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
@@ -405,6 +386,7 @@ if __name__ == "__main__":
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
 
+    # outfiles parser
     parser_out = subparsers.add_parser('outfiles', aliases = ['out'], help="Prints out content of elems under ")
     parser_out.add_argument("id", nargs='?',type= str, help="workflow id")
     parser_out.add_argument("--file", type=str, help="Use already downloaded meta json file as data")
@@ -414,10 +396,12 @@ if __name__ == "__main__":
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
 
+    # connect parser
     parser_connect = subparsers.add_parser('connect')
     parser_connect.add_argument("server", type=str,help="Cromwell server name")
     parser_connect.add_argument("--zone", type=str, default='europe-west1-b', help="Server zone")
 
+    # log parser
     parser_log = subparsers.add_parser('log', help='prints the log')
     parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
     parser_log.add_argument("--kw", type= str,help="Search for keyword")
@@ -478,7 +462,6 @@ if __name__ == "__main__":
 
 
     elif args.command == "submit":
-
         wf_opts = process_inputs(args)
         print(args.wdl,args.inputs,args.label,wf_opts)
         submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,wf_opts = wf_opts,label=args.label,
