@@ -517,10 +517,13 @@ if __name__ == "__main__":
             else:
                 tmp = flatten(out)
             fname = os.path.join(args.id + '.' + key)
-            with open(fname, "w") as f:
-                for line in tmp:
-                    f.write(f"{line}\n")
-                print(f"Output saved to {fname}", file=sys.stderr)
+            if out is None:
+                print(f"Skipping empty output from {fname}", file=sys.stderr)
+            else:
+                with open(fname, "w") as f:
+                    for line in tmp:
+                        f.write(f"{line}\n")
+                    print(f"Output saved to {fname}", file=sys.stderr)
 
     elif args.command == "log":
         with open(args.workflow_log,'rt') as i:
