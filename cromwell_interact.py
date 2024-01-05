@@ -29,6 +29,9 @@ def process_inputs(args):
     if not args.disable_monitoring:
         wf_opts["monitoring_script"]=args.monitor
 
+    if "analysis" not in wf_opts["google_labels"]:
+        wf_opts["google_labels"]["analysis"] = args.label
+
     if "product" not in wf_opts["google_labels"]:
         raise Exception("You must add product google label with --l product=value or --options json")
 
