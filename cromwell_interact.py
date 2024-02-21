@@ -367,9 +367,9 @@ if __name__ == "__main__":
     # submit parser
     parser_submit = subparsers.add_parser('submit', help='submit a job')
     parser_submit.add_argument('--wdl', type=str, help='Path to wdl script',required = True)
-    parser_submit.add_argument('--inputs', type=str, help='Path to wdl inputs')
+    parser_submit.add_argument('--inputs', '--i', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
-    parser_submit.add_argument('--label', type=str, help='Label of the workflow',default = '')
+    parser_submit.add_argument('--label', '--L', type=str, help='Label of the workflow',default = '')
     parser_submit.add_argument('--monitor',type=str,default="gs://fg-analysis-public-resources/monitor_script.sh",help="give custom monitoring script path in cloud")
     parser_submit.add_argument('--disable-monitoring',action="store_true",help='Disable task monitoring')
 
@@ -413,9 +413,9 @@ if __name__ == "__main__":
     # add parser
     parser_add = subparsers.add_parser("add", help="manually add cromwell entry to log")
     parser_add.add_argument("id", type=str, help="Workflow id")
-    parser_add.add_argument("--name", "-n", type=str, required=True, help="Workflow name")
-    parser_add.add_argument("--label", "-l", type=str, required=False, help="Workflow label")
-    parser_add.add_argument("--time", "-t", type=str, required=False, help="Submission time (YYYY-MM-DD hh:mm:ss)")
+    parser_add.add_argument("--name", "--n", type=str, required=True, help="Workflow name")
+    parser_add.add_argument("--label", "--l", type=str, required=False, help="Workflow label")
+    parser_add.add_argument("--time", "--t", type=str, required=False, help="Submission time (YYYY-MM-DD hh:mm:ss)")
 
     args = parser.parse_args()
     args.workflow_log = os.path.join(rootPath,'workflows.log')
