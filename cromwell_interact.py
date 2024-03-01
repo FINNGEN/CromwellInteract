@@ -15,7 +15,11 @@ make_sure_path_exists(tmpPath)
 
 def process_inputs(args):
 
-    if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
+    if not args.inputs:
+        inputfile = args.wdl.replace('.wdl','.json')
+        if not os.path.isfile(inputfile):
+            raise Exception(f'No input file found for {args.wdl}. Please specify input file with --inputs')
+        args.inputs = inputfile
 
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
