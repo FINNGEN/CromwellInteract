@@ -8,6 +8,7 @@ import re,sys
 import dateutil.parser
 import json
 import re
+import zipfile
 
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
@@ -38,6 +39,19 @@ def process_inputs(args):
 
     if "product" not in wf_opts["google_labels"]:
         raise Exception("You must add product google label with --l product=value or --options json")
+    
+    # if deps not given, try adding them automatically
+    if not args.deps:
+        with open(args.wdl, 'r') as wdl_file:
+            wdl_lines = wdl_file.readlines()
+            dependency_files = [line.split('"')[1].strip() for line in wdl_lines if re.search('^import ".*.wdl"', line)]
+
+        if dependency_files:
+            dependency_zip = args.wdl.replace('.wdl', '.zip')
+            with zipfile.ZipFile(dependency_zip, 'w') as zip_file:
+                for file in dependency_files:
+                    zip_file.write(file)
+            args.deps = dependency_zip
 
     return wf_opts
 
