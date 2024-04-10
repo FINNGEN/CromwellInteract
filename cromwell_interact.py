@@ -84,6 +84,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
 
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
+    if not label:label = wdl_name
     with open(os.path.join(rootPath,'workflows.log'),'a') as o:
         o.write(' '.join([current_date,wdl_name,jobID,label]) + '\n')
 
@@ -340,15 +341,34 @@ def get_status(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
     cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/status\" -H \"accept: application/json\" --socks5 localhost:{port}  '
     print(cmd1)
 
-    pr = subprocess.run(shlex.split(cmd1), stderr=PIPE, encoding="ASCII", timeout=timeout)
+    pr = subprocess.run(shlex.split(cmd1), capture_output=True, text=True, encoding="ASCII", timeout=timeout)
     if pr.returncode!=0:
         print(pr.stderr)
         raise Exception(f'Error occurred while requesting metadata. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
 
+    res = json.loads(pr.stdout)
+    print(res)
+    status = res['status']
+    return status
 
-    print(pr)
-
-
+def update_log(args,id,status):
+    with open(args.workflow_log, "r+") as f:
+        old = [elem.strip().split(" ") for elem in f.readlines()] # read everything in the file
+        new_lines = []
+        for line in old:
+            date,name,w_id,*_ = line
+            if w_id == id:
+                if len(line) ==4:
+                    line.append(status)
+                elif len(line) == 5:
+                    line[4] = status
+                elif len(line) ==3:
+                    line.append(name)
+                    line.append(status)
+            new_lines.append(line)
+    with open(args.workflow_log,'wt') as o:
+        for line in new_lines:
+            o.write(' '.join(line) + '\n')
 
 
 
@@ -400,29 +420,31 @@ if __name__ == "__main__":
     parser_log.add_argument("--kw", type= str,help="Search for keyword")
 
     args = parser.parse_args()
-
+    args.workflow_log = os.path.join(rootPath,'workflows.log')
 
     if args.outpath:
         rootPath=args.outpath + "/"
 
     if args.command =='abort':
         abort(args.id, args.port)
+        update_log(args,args.id,'Aborted')
 
     elif args.command in ['metadata',"meta"]:
         if not args.id: args.id = get_last_job()
         print(args.id)
 
         if args.running:
-            get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
+            status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
             args.summary = args.failed_jobs = False
-
+            update_log(args,args.id,status)
         if args.summary or args.failed_jobs:
             if args.file:
                 metadat=json.load(open(args.file))
             else:
                 metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
                             nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
-
+            status = metadat['status']
+            update_log(args,args.id,status)
             top_call_counts, summary = print_summary(metadat, args=args, port=args.port ,
                             expand_subs=True, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
@@ -472,7 +494,7 @@ if __name__ == "__main__":
 
 
     if args.command == "log":
-        with open(os.path.join(rootPath,'workflows.log'),'rt') as i:
+        with open(args.workflow_log,'rt') as i:
             data = [elem.strip() for elem in i.readlines()]
         if args.kw:
             data = [elem for elem in data if args.kw in elem]
