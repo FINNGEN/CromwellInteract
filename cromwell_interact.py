@@ -452,7 +452,7 @@ if __name__ == "__main__":
 
         if args.running:
             status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
-            if status != 'fail':
+            if status not in ['fail', 'error']:
                 args.summary = args.failed_jobs = False
                 update_log(args,args.id,status)
         
@@ -463,7 +463,8 @@ if __name__ == "__main__":
                 metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
                             nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
             status = metadat['status']
-            update_log(args,args.id,status)
+            if status not in ['fail', 'error']:
+                update_log(args,args.id,status)
             top_call_counts, summary = print_summary(metadat, args=args, port=args.port ,
                             expand_subs=True, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
@@ -504,7 +505,8 @@ if __name__ == "__main__":
                         minkeys=False, http_port=args.http_port, nocalls=True)
         outs = metadat["outputs"]
         status = metadat['status']
-        update_log(args, args.id, status)
+        if status not in ['fail', 'error']:
+            update_log(args, args.id, status)
 
         if not outs.keys():
             raise Exception(f'No outputs found for {args.id}. Job status: {status}')
