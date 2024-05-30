@@ -236,9 +236,10 @@ def get_meta_summary(metadat, args, port, indent=0, expand_subs=False, timeout=6
     summary,summaries = get_workflow_summary(metadat, args.print_jobs_with_status)
     times = get_workflow_exec_time(metadat)
     if verbose:
-        print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
-        print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
-        print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
+        print(f'{ind(indent)}Workflow name:\t{get_workflow_name(metadat)}')
+        print(f'{ind(indent)}Current status:\t{get_workflow_status(metadat)}')
+        print(f'{ind(indent)}Start:\t\t{times[0]}')
+        print(f'{ind(indent)}End:\t\t{times[1]}')
         print("")
 
     top_call_counts = defaultdict(lambda :Counter())
@@ -255,9 +256,12 @@ def get_meta_summary(metadat, args, port, indent=0, expand_subs=False, timeout=6
         avg = f'{v["total_time"]/v["finished_jobs"]/60.0:.2f}' if v["finished_jobs"]>0 else None
 
         if verbose:
-            print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else "sub-workflow" }\n{ind(indent)}job statuses\t {callstat}')
-            print(f'{ind(indent)}Max time: {max} minutes, min time {min} minutes , average time { avg } minutes')
-            print(f'{ind(indent)}Max job {v["max_job"]}\n{ind(indent)}Min job {v["min_job"]}')
+            print(f'{ind(indent)}Call:\t\t{k}')
+            print(f'{ind(indent)}Job statuses:\t{callstat}')
+            print(f'{ind(indent)}Basepath:\t{v["basepath"] if "basepath" in v else "sub-workflow"}')
+            print(f'{ind(indent)}Time:\t\tMax: {max} min. Min: {min} min. Average: {avg} min.')
+            print(f'{ind(indent)}Max job:\t{v["max_job"]}')
+            print(f'{ind(indent)}Min job:\t{v["min_job"]}')
             print("")
         if args.failed_jobs:
             print_failed_jobs(v["failed_jobs"], indent=indent)
@@ -271,7 +275,7 @@ def get_meta_summary(metadat, args, port, indent=0, expand_subs=False, timeout=6
                 print(f'{ind(indent)}Sub-workflow ({v["subworkflowid"]}):')
             if expand_subs:
                 if verbose:
-                    print("getting sub data")
+                    print("Getting sub data")
                 sub = get_metadata(id=v["subworkflowid"], port=port, timeout=timeout,
                                    nocalls=args.no_calls, minkeys=args.minkeys, http_port=args.http_port,
                                    verbose=args.verbose)
@@ -478,7 +482,7 @@ if __name__ == "__main__":
                 update_log(args,args.id,status)
             top_call_counts, summary = get_meta_summary(metadat, args=args, port=args.port ,
                             expand_subs=True, timeout=args.cromwell_timeout, verbose=args.verbose)
-            callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
+            callstat = "\n".join([ "Calls for " + stat + ": " + ", ".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
             print("Total call statuses across subcalls:")
             print(callstat)
 
