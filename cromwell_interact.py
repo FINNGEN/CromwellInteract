@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 from subprocess import Popen,PIPE,call,run
 import subprocess
-import shlex,os,argparse,datetime,json,pyperclip
+import shlex,os,argparse,datetime,json
 from utils import make_sure_path_exists, flatten
 from collections import defaultdict, Counter
 import re,sys
@@ -97,7 +97,12 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         raise Exception(f'Error in Cromwell request. Error:{resp["message"]}' )
     jobID = resp['id']
     print(jobID)
-    pyperclip.copy(jobID)
+    try:
+        import pyperclip
+        pyperclip.copy(jobID)
+        print(f'Job ID copied to clipboard: {jobID}')
+    except ImportError:
+        pass
 
     current_date = datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
@@ -416,7 +421,7 @@ if __name__ == "__main__":
             ,help="If don't get call level data. In this way failed jobs can be listed for a workflow with too many rows")
     parser_meta.add_argument("--summary",'-s', action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--running",'-r', action="store_true"  ,help="Print whether it's running or not")
-    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
+    parser_meta.add_argument("--failed_jobs", "-f", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
     parser_meta.add_argument("--verbose", "-v", action="store_true"  ,help="Print verbose output")
