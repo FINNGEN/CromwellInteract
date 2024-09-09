@@ -95,6 +95,21 @@ def workflowstatus(jsondat):
 def get_workflow_failures(jsondat):
     return [ m["message"] for m in d["failures"][0].values() ]
 
+
+def get_outputs(workflowID, port, timeout=60, http_port=80):
+    cmd = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/outputs\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+    pr = subprocess.run(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="ASCII", timeout=timeout)
+    if pr.returncode!=0:
+        print(pr.stderr)
+        raise Exception(f'Error occurred while requesting outputs. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
+    
+    jsondat = json.loads(pr.stdout)
+
+    if 'status' in jsondat and jsondat['status']=='fail' :
+        raise Exception(f'Error requesting outputs. Cromwell message: {jsondat["message"]}')
+
+    return jsondat
+
 def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
     workflowID = id
 
@@ -407,7 +422,7 @@ if __name__ == "__main__":
 
     parser_out = subparsers.add_parser('outfiles', aliases = ['outfiles'],help="Prints out content of elems under ")
     parser_out.add_argument("id",type= str,help="workflow id")
-    parser_out.add_argument("tag",type= str,help="what output tag to print id")
+    parser_out.add_argument("-tag",type= str,help="what output tag to print out. If omitted, prints all.")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
@@ -477,19 +492,25 @@ if __name__ == "__main__":
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
     elif args.command == "outfiles":
-        metadat = get_metadata(args.id, port=args.port, timeout=60,
-                    minkeys=True,http_port=args.http_port)
+        metadat = get_outputs(args.id, port=args.port, timeout=60,http_port=args.http_port)
         tag = args.tag
 
         def printfiles(lst):
-
+            
             for l in lst:
                 if isinstance(l,list):
                     printfiles(l)
                 else:
                     print(l)
 
-        printfiles(metadat["outputs"][tag])
+
+        flist = metadat["outputs"]
+        if tag:
+            flist = flist[tag]
+            printfiles(flist)
+        else:
+            for k in flist.keys():
+                printfiles(flist[k])
 
 
 
