@@ -2,7 +2,7 @@
 from subprocess import Popen,PIPE,call,run
 import subprocess
 import shlex,os,argparse,datetime,json,pyperclip
-from utils import make_sure_path_exists
+from utils import make_sure_path_exists, printfiles
 from collections import defaultdict, Counter
 import re,sys,warnings
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
@@ -99,6 +99,7 @@ def get_workflow_failures(jsondat):
 def get_outputs(workflowID, port, timeout=60, http_port=80):
     cmd = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/outputs\" -H \"accept: application/json\" --socks5 localhost:{port}  '
     pr = subprocess.run(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="ASCII", timeout=timeout)
+
     if pr.returncode!=0:
         print(pr.stderr)
         raise Exception(f'Error occurred while requesting outputs. Did you remember to setup ssh tunnel? Use cromwellinteract.py connect servername')
@@ -212,6 +213,11 @@ def get_workflow_summary(jsondat, store_with_status=None):
 
             summaries[f'{call}_{i}']['jobstats'][stat_str]+=1
             summary[f'{call}']['jobstats'][stat_str]+=1
+
+            if 'outputs' in job:
+                summary[f'{call}']['outputs'] = job['outputs']
+                summaries[f'{call}_{i}']['outputs'] = job['outputs']
+
             if job["executionStatus"]=="Failed":
                 summaries[f'{call}_{i}']['failed_jobs'].append(job)
                 summary[call]['failed_jobs'].append(job)
@@ -221,8 +227,6 @@ def get_workflow_summary(jsondat, store_with_status=None):
                 summaries[f'{call}_{i}'][store_with_status].append(job)
                 summary[call][store_with_status].append(job)
 
-            if call=="finemap.ldstore_finemap":
-                print(job)
             if "subWorkflowId" not in job:
                 if "stdout" in job:
                     summaries[f'{call}_{i}']["basepath"] = re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
@@ -419,8 +423,11 @@ if __name__ == "__main__":
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
     parser_meta.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
-
+    parser_meta.add_argument("--outputs", type=str, help="File name to save outputs to from all succesful workwflows. ")
+    parser_meta.add_argument("--fileregex", default="^gs://", type=str, help="regex to match output files that pass it.")
     parser_out = subparsers.add_parser('outfiles', aliases = ['outfiles'],help="Prints out content of elems under ")
+    parser_out.add_argument("--fileregex", default="^gs://", type=str, help="regex to match output files that pass it.")
+    
     parser_out.add_argument("id",type= str,help="workflow id")
     parser_out.add_argument("-tag",type= str,help="what output tag to print out. If omitted, prints all.")
     # abort parser
@@ -460,9 +467,12 @@ if __name__ == "__main__":
                             nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
             status = metadat['status']
             update_log(args,args.id,status)
+
+            
             top_call_counts, summary = print_summary(metadat, args=args, port=args.port ,
                             expand_subs=True, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
+           
             print("Total call statuses across subcalls:")
             print(callstat)
 
@@ -476,6 +486,12 @@ if __name__ == "__main__":
                 if "failures" in metadat:
                     print("print top level failures")
                     print_top_level_failure(metadat)
+
+            if args.outputs:
+                for c, s in summary.items():
+                    if 'outputs' in s:
+                        print(f'Saving output to file {args.outputs}')
+                        printfiles(list(s['outputs'].values()), open(args.outputs,'wt'), args.fileregex)
 
 
     elif args.command == "submit":
@@ -492,17 +508,9 @@ if __name__ == "__main__":
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
     elif args.command == "outfiles":
+
         metadat = get_outputs(args.id, port=args.port, timeout=60,http_port=args.http_port)
         tag = args.tag
-
-        def printfiles(lst):
-            
-            for l in lst:
-                if isinstance(l,list):
-                    printfiles(l)
-                else:
-                    print(l)
-
 
         flist = metadat["outputs"]
         if tag:
