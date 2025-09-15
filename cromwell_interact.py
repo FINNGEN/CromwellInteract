@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 from subprocess import Popen,PIPE,call,run
 import subprocess
 import shlex,os,argparse,datetime,json
@@ -70,7 +70,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
 
     user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
     wf_opts["google_labels"]["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")
-    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname
+    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname.strip('_-').lower()
 
 
     cmd = (f'curl -X POST http://localhost:{http_port}/api/workflows/v1 -H "accept: application/json" -H "Content-Type: multipart/form-data" '
@@ -111,9 +111,8 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         o.write('\t'.join([current_date,wdl_name,jobID,label,resp['status']]) + '\n')
 
 def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80, verbose=True):
-    workflowID = id
-
-    metadat = f"{os.path.join(tmpPath,workflowID +'.json')}"
+    metadat = f"{os.path.join(tmpPath,id +'.json')}"
+    
     with open(metadat ,'w') as o:
         excl_calls = ""
         if nocalls:
@@ -123,7 +122,7 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80,
         if minkeys:
             keys=("&includeKey=status&includeKey=executionStatus&includeKey=failures&includeKey=workflowName&includeKey=start&includeKey=end")
 
-        cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
+        cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{id}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
         if verbose:
             print(cmd1)
 
@@ -218,8 +217,8 @@ def get_workflow_summary(jsondat, store_with_status=None, verbose=False):
                 summaries[f'{call}_{i}'][store_with_status].append(job)
                 summary[call][store_with_status].append(job)
 
-            if call=="finemap.ldstore_finemap":
-                print(job)
+            #if call=="finemap.ldstore_finemap":
+            #    print(job)
             if "subWorkflowId" not in job:
                 if "stdout" in job:
                     summaries[f'{call}_{i}']["basepath"] = re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
@@ -239,8 +238,9 @@ def get_jobs_with_status(jsondat, status):
 
 def get_meta_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60, verbose=False):
     summary,summaries = get_workflow_summary(metadat, args.print_jobs_with_status)
-    times = get_workflow_exec_time(metadat)
+    
     if verbose:
+        times = get_workflow_exec_time(metadat)
         print(f'{ind(indent)}Workflow name:\t{get_workflow_name(metadat)}')
         print(f'{ind(indent)}Current status:\t{get_workflow_status(metadat)}')
         print(f'{ind(indent)}Start:\t\t{times[0]}')
@@ -251,16 +251,15 @@ def get_meta_summary(metadat, args, port, indent=0, expand_subs=False, timeout=6
 
     for k,v in summary.items():
         callstat = ", ".join([ f'{stat}:{n}' for stat,n in v['jobstats'].items()])
-        totaljobs= 0
+        #totaljobs= 0
         for stat, n in v['jobstats'].items():
             top_call_counts[k][stat]+=n
-            totaljobs +=n
-
-        max = f'{v["max_time"]/60.0:.2f}' if v["max_time"] is not None else None
-        min = f'{v["min_time"]/60.0:.2f}' if v["min_time"] is not None else None
-        avg = f'{v["total_time"]/v["finished_jobs"]/60.0:.2f}' if v["finished_jobs"]>0 else None
+            #totaljobs +=n
 
         if verbose:
+            max = f'{v["max_time"]/60.0:.2f}' if v["max_time"] is not None else None
+            min = f'{v["min_time"]/60.0:.2f}' if v["min_time"] is not None else None
+            avg = f'{v["total_time"]/v["finished_jobs"]/60.0:.2f}' if v["finished_jobs"]>0 else None
             print(f'{ind(indent)}Call:\t\t{k}')
             print(f'{ind(indent)}Job statuses:\t{callstat}')
             print(f'{ind(indent)}Basepath:\t{v["basepath"] if "basepath" in v else "sub-workflow"}')
@@ -314,13 +313,13 @@ def print_jobs_with_status(joblist, status ,indent=0):
         print(f'{ind(indent)}Job \tshard# {j["shardIndex"]}')
 
 def print_failed_jobs(joblist, indent=0):
-    print(f'{ind(indent)}FAILED JOBS:')
+    #print(f'{ind(indent)}FAILED JOBS:')
     if len(joblist)==0:
-        print(f'{ind(indent)}No failed jobs!')
+        #print(f'{ind(indent)}No failed jobs!')
         return
 
     for j in joblist:
-        print(f'{ind(indent)}Failed\tshard# {j["shardIndex"]}')
+        #print(f'{ind(indent)}Failed\tshard# {j["shardIndex"]}')
         # nested caused bys in subworkflows
         fail_msgs = [ get_failmsg(f) for f in j["failures"] ]
         print("{}{}".format(ind(indent),"\n\n".join(fail_msgs)))
@@ -414,7 +413,7 @@ if __name__ == "__main__":
     label_options.add_argument('--google_labels', '--l', type=str, help='Labels (comma separated key=value list) of the workflow for google. Must contain product at minimum.')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
-    parser_meta.add_argument("id", nargs='?',type= str,help="workflow id",default = "")
+    parser_meta.add_argument("id", nargs='?',type=str,help="workflow id",default = "")
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--minkeys", action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--no_calls", action="store_true"
@@ -428,13 +427,13 @@ if __name__ == "__main__":
 
     # outfiles parser
     parser_out = subparsers.add_parser('outfiles', aliases = ['out'], help="Prints out content of elems under ")
-    parser_out.add_argument("id", nargs='?',type= str, help="workflow id")
+    parser_out.add_argument("id", nargs='?',type=str, help="workflow id")
     parser_out.add_argument("--file", type=str, help="Use already downloaded meta json file as data")
-    parser_out.add_argument("--tag",type= str, help="what output tag to print id")
+    parser_out.add_argument("--tag",type=str, help="what output tag to print id")
 
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
-    parser_abort.add_argument("id", type= str,help="workflow id")
+    parser_abort.add_argument("id", type=str,help="workflow id")
 
     # connect parser
     parser_connect = subparsers.add_parser('connect')
@@ -443,9 +442,10 @@ if __name__ == "__main__":
 
     # log parser
     parser_log = subparsers.add_parser('log', help='prints the log')
-    parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
-    parser_log.add_argument("--kw", type= str,help="Search for keyword")
-    parser_log.add_argument("--running", '-r', action="store_true", help="Print only jobs with status=='Running'")
+    parser_log.add_argument("--n", type=int,default =10,help="number of latest jobs to print")
+    parser_log.add_argument("--kw", type=str,help="Search for keyword")
+    parser_log.add_argument("--running", '-r', action="store_true", help="Print only running jobs")
+    parser_log.add_argument("--status", type=str, help="Print only jobs with this status")
 
     # add parser
     parser_add = subparsers.add_parser("add", help="manually add cromwell entry to log")
@@ -556,6 +556,8 @@ if __name__ == "__main__":
             data = [elem.strip() for elem in i.readlines()]
         if args.kw:
             data = [elem for elem in data if args.kw in elem]
+        if args.status:
+            data = [elem for elem in data if args.status.lower() in elem.split('\t')[-1].lower()]
         if args.running:
             data = [elem for elem in data if elem.split('\t')[-1] in ['Running', 'Submitted', 'Aborting']]
         idx = min(args.n,len(data))
