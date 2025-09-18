@@ -121,7 +121,7 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80)
 
         keys=""
         if minkeys:
-            keys=("&includeKey=status&includeKey=executionStatus&includeKey=failures&includeKey=workflowName")
+            keys=("&includeKey=status&includeKey=executionStatus&includeKey=failures&includeKey=workflowName&includeKey=workflowRoot")
                 #"&includeKey=start&includeKey=end")
 
         cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/metadata?expandSubWorkflows=false{excl_calls}{keys}\" -H \"accept: application/json\" --socks5 localhost:{port}  '
@@ -162,6 +162,10 @@ def get_workflow_name(jsondat):
 
 def get_workflow_status(jsondat):
     return jsondat['status']
+
+
+def get_workflow_root(jsondat):
+    return jsondat["workflowRoot"]
 
 
 def get_workflow_summary(jsondat, store_with_status=None):
@@ -228,7 +232,6 @@ def get_workflow_summary(jsondat, store_with_status=None):
                     summaries[f'{call}_{i}']["basepath"] = re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
                     summary[call]['basepath']= re.sub(r"(((shard|attempt)-[0-9]+/)+stdout|/stdout)","",job["stdout"])
             else:
-                print(f'sub found for {call}_{i}')
                 summaries[f'{call}_{i}']['subworkflowid'] = job["subWorkflowId"]
 
     return (summary,summaries)
@@ -239,9 +242,11 @@ def ind(n):
 def get_jobs_with_status(jsondat, status):
     return [ v for (c,v) in jsondat["calls"].items() if v["executionStatus"]==status ]
 
-def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
+def print_summary(metadat, port, failed_jobs=True, print_jobs_with_status=None,
+                  indent=0, expand_subs=False, timeout=60):
     summary,summaries = get_workflow_summary(metadat, args.print_jobs_with_status)
     print(f'{ind(indent)}Workflow name\t{ get_workflow_name(metadat) } ')
+    print(f'{ind(indent)}Workflow root\t { get_workflow_root(metadat)}')
     print(f'{ind(indent)}Current status \t { get_workflow_status(metadat)}')
     times =get_workflow_exec_time(metadat)
     print(f'{ind(indent)}Start\t{times[0]} \n{ind(indent)}End\t{times[1]}')
@@ -256,28 +261,29 @@ def print_summary(metadat, args, port, indent=0, expand_subs=False, timeout=60):
             top_call_counts[k][stat]+=n
             totaljobs +=n
 
-        print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else "sub-workflow" }\n{ind(indent)}job statuses\t {callstat}')
+
+        print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else f'{get_workflow_root(metadat)}/{k}'}\n{ind(indent)}job statuses\t {callstat}')
         max = f'{v["max_time"]/60.0:.2f}' if v["max_time"] is not None else None
         min = f'{v["min_time"]/60.0:.2f}' if v["min_time"] is not None else None
         avg = f'{v["total_time"]/v["finished_jobs"]/60.0:.2f}' if v["finished_jobs"]>0 else None
         print(f'{ind(indent)}Max time: {max} minutes, min time {min} minutes , average time { avg } minutes')
         print(f'{ind(indent)}Max job {v["max_job"]}\n{ind(indent)}Min job {v["min_job"]}')
-        if args.failed_jobs:
+        if failed_jobs:
             print_failed_jobs(v["failed_jobs"], indent=indent)
 
-        if args.print_jobs_with_status:
+        if print_jobs_with_status:
             print_jobs_with_status(v[args.print_jobs_with_status],args.print_jobs_with_status, indent=indent)
 
         print("")
     for k,v in summaries.items():
 
         if 'subworkflowid' in v:
-            print(f'{ind(indent)}Sub-workflow ({v["subworkflowid"]}):')
             if expand_subs:
-                print("getting sub data")
+                print(f'{ind(indent)}Sub-workflow ({v["subworkflowid"]}):')
                 sub=get_metadata(v["subworkflowid"], port=port, timeout=timeout,
                             nocalls=args.no_calls, minkeys=args.minkeys, http_port=args.http_port)
-                (top, summ) = print_summary(sub, args, port=port,indent=indent+1, expand_subs=expand_subs)
+                (top, summ) = print_summary(sub, port=port, failed_jobs=failed_jobs, print_jobs_with_status=print_jobs_with_status, 
+                                            indent=indent+1, expand_subs=expand_subs)
                 for call,count in top.items():
                     if call in top_call_counts:
                         top_call_counts[call] = top_call_counts[call] + count
@@ -415,7 +421,8 @@ if __name__ == "__main__":
             ,help="If don't get call level data. In this way failed jobs can be listed for a workflow with too many rows")
     parser_meta.add_argument("--summary",'-s', action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--running",'-r', action="store_true"  ,help="Print whether it's running or not")
-    parser_meta.add_argument("--failed_jobs", action="store_true"  ,help="Print summary of failed jobs after each workflow")
+    parser_meta.add_argument("--no_failed_jobs", action="store_true"  ,help="Dont Print summary of failed jobs after each workflow")
+    parser_meta.add_argument("--print_subs", action="store_true"  ,help="Don expand subworkflows to get details of each subworkflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
     parser_meta.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
@@ -460,8 +467,10 @@ if __name__ == "__main__":
                             nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
             status = metadat['status']
             update_log(args,args.id,status)
-            top_call_counts, summary = print_summary(metadat, args=args, port=args.port ,
-                            expand_subs=True, timeout=args.cromwell_timeout )
+            top_call_counts, summary = print_summary(metadat, failed_jobs=not args.no_failed_jobs,
+                                                      print_jobs_with_status=args.print_jobs_with_status, 
+                                                     port=args.port ,
+                            expand_subs=args.print_subs, timeout=args.cromwell_timeout )
             callstat = "\n".join([ "Calls for " + stat + "... " + ",".join([ f'{call}:{n}' for call,n in calls.items()])  for stat,calls in top_call_counts.items()])
             print("Total call statuses across subcalls:")
             print(callstat)
