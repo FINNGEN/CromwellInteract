@@ -459,7 +459,7 @@ if __name__ == "__main__":
             status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
             args.summary = args.failed_jobs = False
             update_log(args,args.id,status)
-        if args.summary or args.failed_jobs:
+        if args.summary :
             if args.file:
                 metadat=json.load(open(args.file))
             else:
