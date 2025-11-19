@@ -51,7 +51,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
 
     user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
     wf_opts["google_labels"]["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")[:63].rstrip("-")
-    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname
+    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname.lower()
 
 
     cmd = (f'curl -X POST http://localhost:{http_port}/api/workflows/v1 -H "accept: application/json" -H "Content-Type: multipart/form-data" '
