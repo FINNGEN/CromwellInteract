@@ -50,7 +50,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
                 break
 
     user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
-    wf_opts["google_labels"]["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")
+    wf_opts["google_labels"]["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")[:63].rstrip("-")
     wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname
 
 
@@ -80,7 +80,8 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         raise Exception(f'Error in Cromwell request. Error:{resp["message"]}' )
     jobID = resp['id']
     print(jobID)
-    pyperclip.copy(jobID)
+    if pyperclip.is_available():
+    	pyperclip.copy(jobID)
 
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
@@ -261,8 +262,7 @@ def print_summary(metadat, port, failed_jobs=True, print_jobs_with_status=None,
             top_call_counts[k][stat]+=n
             totaljobs +=n
 
-
-        print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else f'{get_workflow_root(metadat)}/{k}'}\n{ind(indent)}job statuses\t {callstat}')
+        print(f'{ind(indent)}Call "{k}"\n{ind(indent)}Basepath\t{v["basepath"] if "basepath" in v else f"{get_workflow_root(metadat)}/{k}"}\n{ind(indent)}job statuses\t {callstat}')
         max = f'{v["max_time"]/60.0:.2f}' if v["max_time"] is not None else None
         min = f'{v["min_time"]/60.0:.2f}' if v["min_time"] is not None else None
         avg = f'{v["total_time"]/v["finished_jobs"]/60.0:.2f}' if v["finished_jobs"]>0 else None
