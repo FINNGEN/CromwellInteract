@@ -8,9 +8,10 @@ and type `source ~/.bashrc`.
 From now on you can simply invoke the script using the shortcut `cromwell`.
 
 ## Requirements
-pyperclip:  `pip install pyperclip`
-dateutil:   `pip install python-dateutil`
-requests:   `pip install requests`
+install requirements from the requirements file:
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 The script is calling with the following syntax:
