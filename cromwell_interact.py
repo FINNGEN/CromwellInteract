@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 from subprocess import Popen,PIPE,call,run
 import subprocess
-import shlex,os,argparse,datetime,json
+import shlex,os,argparse,datetime,json,math
 from utils import make_sure_path_exists, flatten
 from collections import defaultdict, Counter
 import re,sys
@@ -230,6 +230,36 @@ def get_workflow_summary(jsondat, store_with_status=None, verbose=False):
 
     return (summary,summaries)
 
+def format_time(seconds):
+    """Format time based on duration:
+    - <1 min: "x s"
+    - >=1 min and <1 hour: "x min y s"
+    - >=1 hour and <24 hours: "x h y min z s"
+    - >=24 hours: "x d y h z min"
+    """
+    if seconds is None:
+        return None
+    
+    # Round up to nearest second
+    seconds = math.ceil(seconds)
+    
+    if seconds < 60:
+        return f"{seconds} s"
+    elif seconds < 3600:  # < 1 hour
+        mins = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{mins} min {secs} s"
+    elif seconds < 86400:  # < 24 hours
+        hours = int(seconds // 3600)
+        mins = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours} h {mins} min {secs} s"
+    else:  # >= 24 hours
+        days = int(seconds // 86400)
+        hours = int((seconds % 86400) // 3600)
+        mins = int((seconds % 3600) // 60)
+        return f"{days} d {hours} h {mins} min"
+
 def ind(n):
     return "\t".join([""]*(n+1))
 
@@ -257,13 +287,14 @@ def get_meta_summary(metadat, args, port, indent=0, expand_subs=False, timeout=6
             #totaljobs +=n
 
         if verbose:
-            max = f'{v["max_time"]/60.0:.2f}' if v["max_time"] is not None else None
-            min = f'{v["min_time"]/60.0:.2f}' if v["min_time"] is not None else None
-            avg = f'{v["total_time"]/v["finished_jobs"]/60.0:.2f}' if v["finished_jobs"]>0 else None
+            max_time_formatted = format_time(v["max_time"]) if v["max_time"] is not None else None
+            min_time_formatted = format_time(v["min_time"]) if v["min_time"] is not None else None
+            avg_time_seconds = v["total_time"]/v["finished_jobs"] if v["finished_jobs"]>0 else None
+            avg_time_formatted = format_time(avg_time_seconds) if avg_time_seconds is not None else None
             print(f'{ind(indent)}Call:\t\t{k}')
             print(f'{ind(indent)}Job statuses:\t{callstat}')
             print(f'{ind(indent)}Basepath:\t{v["basepath"] if "basepath" in v else "sub-workflow"}')
-            print(f'{ind(indent)}Time:\t\tMax: {max} min. Min: {min} min. Average: {avg} min.')
+            print(f'{ind(indent)}Time:\t\tMax: {max_time_formatted}. Min: {min_time_formatted}. Average: {avg_time_formatted}.')
             print(f'{ind(indent)}Max job:\t{v["max_job"]}')
             print(f'{ind(indent)}Min job:\t{v["min_job"]}')
             print("")
@@ -405,7 +436,7 @@ if __name__ == "__main__":
     parser_submit.add_argument('--inputs', '--i', type=str, help='Path to wdl inputs')
     parser_submit.add_argument('--deps', type=str, help='Path to zipped dependencies file')
     parser_submit.add_argument('--label', '--L', type=str, help='Label of the workflow',default = '')
-    parser_submit.add_argument('--monitor',type=str,default="gs://fg-analysis-public-resources/monitor_script.sh",help="give custom monitoring script path in cloud")
+    parser_submit.add_argument('--monitor',type=str,default="gs://fg-analysis-public-resources/monitor_script.sh",help="give custom monitoring script path in cloud. Default: gs://fg-analysis-public-resources/monitor_script.sh")
     parser_submit.add_argument('--disable-monitoring',action="store_true",help='Disable task monitoring')
 
     label_options = parser_submit.add_mutually_exclusive_group(required=True)
@@ -417,9 +448,9 @@ if __name__ == "__main__":
     parser_meta.add_argument("--file", type=str  ,help="Use already downloaded meta json file as data")
     parser_meta.add_argument("--minkeys", action="store_true"  ,help="Print summary of workflow")
     parser_meta.add_argument("--no_calls", action="store_true"
-            ,help="If don't get call level data. In this way failed jobs can be listed for a workflow with too many rows")
+            ,help="Don't get call level data. This way failed jobs can be listed for a workflow with too many rows")
     parser_meta.add_argument("--summary",'-s', action="store_true"  ,help="Print summary of workflow")
-    parser_meta.add_argument("--running",'-r', action="store_true"  ,help="Print whether it's running or not")
+    parser_meta.add_argument("--running",'-r', action="store_true"  ,help="Print whether job is running or not")
     parser_meta.add_argument("--failed_jobs", "-f", action="store_true"  ,help="Print summary of failed jobs after each workflow")
     parser_meta.add_argument("--summarize_failed_jobs", action="store_true"  ,help="Print summary of failed jobs over all workflow")
     parser_meta.add_argument("--print_jobs_with_status", type=str ,help="Print summary of jobs with specific status jobs")
