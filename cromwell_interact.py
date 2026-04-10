@@ -34,7 +34,7 @@ def process_inputs(args):
     if not args.disable_monitoring:
         wf_opts["monitoring_script"]=args.monitor
 
-    if "analysis" not in wf_opts["google_labels"]:
+    if "analysis" not in wf_opts["google_labels"] and args.label:
         wf_opts["google_labels"]["analysis"] = args.label.lower().replace("_", "-")
 
     if "product" not in wf_opts["google_labels"]:
