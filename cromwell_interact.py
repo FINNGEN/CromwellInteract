@@ -136,6 +136,9 @@ def get_metadata(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80,
     ret = json.load(open(metadat,'r'))
     if ret['status']=='fail' :
         raise Exception(f'Error requesting metadata. Cromwell message: {ret["message"]}')
+    
+    if ret['status']=='error':
+        raise Exception(f'Error retrieving metadata from Cromwell. {ret["message"]}')
 
     #if ret['status']=='Failed':
     #    raise Exception(f'Workflow not submitted successfully. Cromwell message: { ret["failures"]}')
@@ -167,6 +170,9 @@ def get_workflow_status(jsondat):
 def get_workflow_summary(jsondat, store_with_status=None, verbose=False):
     summaries = defaultdict( lambda: dict() )
     summary= defaultdict(lambda: dict())
+
+    if "calls" not in jsondat:
+        raise Exception(f'Invalid metadata: "calls" field not found. Metadata status: {jsondat.get("status", "unknown")}. {jsondat.get("message", "")}')
 
     for call,v in jsondat["calls"].items():
         uniq_shards={}
@@ -509,6 +515,9 @@ if __name__ == "__main__":
         if args.summary or args.failed_jobs or args.summarize_failed_jobs:
             if args.file:
                 metadat=json.load(open(args.file))
+                # Validate loaded metadata
+                if metadat.get('status') == 'error':
+                    raise Exception(f'Error in metadata file. {metadat.get("message", "")}')
             else:
                 metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
                             nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port,
@@ -551,6 +560,9 @@ if __name__ == "__main__":
 
         if args.file:
             metadat=json.load(open(args.file))
+            # Validate loaded metadata
+            if metadat.get('status') == 'error':
+                raise Exception(f'Error in metadata file. {metadat.get("message", "")}')
         else:
             metadat = get_metadata(args.id, port=args.port, timeout=args.cromwell_timeout,
                         minkeys=False, http_port=args.http_port, nocalls=True)
