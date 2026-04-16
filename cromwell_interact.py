@@ -434,8 +434,10 @@ if __name__ == "__main__":
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
 
-    parser_abort = subparsers.add_parser('connect' )
-    parser_abort.add_argument("server", type=str,help="Cromwell server name")
+    parser_connect = subparsers.add_parser('connect' )
+    parser_connect.add_argument("server", type=str,help="Cromwell server name")
+    parser_connect.add_argument("--project", type=str, help="GCP project name")
+    parser_connect.add_argument("--zone", type=str, help="Server zone")
 
     parser_log = subparsers.add_parser('log', help='prints the log')
     parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
@@ -496,8 +498,13 @@ if __name__ == "__main__":
 
     elif args.command == "connect":
         print("Trying to connect to server...")
-        subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"',
-                    shell=True, encoding="ASCII")
+        connect_cmd = f'gcloud compute ssh {args.server}'
+        if args.project:
+            connect_cmd += f' --project={args.project}'
+        if args.zone:
+            connect_cmd += f' --zone={args.zone}'
+        connect_cmd += f' -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"'
+        subprocess.check_call(connect_cmd, shell=True, encoding="ASCII")
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
     elif args.command == "outfiles":
