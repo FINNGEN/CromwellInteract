@@ -434,7 +434,7 @@ if __name__ == "__main__":
     parser.add_argument('--outpath', type=str, help='Path to wdl script',required = False)
     parser.add_argument("--port", type=int, default=5000, help="SSH port")
     parser.add_argument("--http_port", type=int, default=80, help="Cromwell server port")
-    parser.add_argument("--cromwell_timeout", type=int, default=60  ,help="Time in seconds to wait for response from cromwell")
+    parser.add_argument("--cromwell_timeout", type=int, default=120  ,help="Time in seconds to wait for response from cromwell")
 
     # submit parser
     parser_submit = subparsers.add_parser('submit', help='submit a job')
@@ -476,6 +476,7 @@ if __name__ == "__main__":
     parser_connect = subparsers.add_parser('connect')
     parser_connect.add_argument("server", type=str,help="Cromwell server name")
     parser_connect.add_argument("--zone", type=str, default='europe-west1-b', help="Server zone")
+    parser_connect.add_argument("--project", type=str, help="GCP project name")
 
     # log parser
     parser_log = subparsers.add_parser('log', help='prints the log')
@@ -551,8 +552,13 @@ if __name__ == "__main__":
 
     elif args.command == "connect":
         print("Trying to connect to server...")
-        subprocess.check_call(f'gcloud compute ssh {args.server} --zone {args.zone} -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"',
-                    shell=True, encoding="ASCII")
+        connect_cmd = f'gcloud compute ssh {args.server}'
+        if args.project:
+            connect_cmd += f' --project={args.project}'
+        if args.zone:
+            connect_cmd += f' --zone={args.zone}'
+        connect_cmd += f' -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"'
+        subprocess.check_call(connect_cmd, shell=True, encoding="ASCII")
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
     elif args.command in ["outfiles", "out"]:
