@@ -55,7 +55,7 @@ def process_inputs(args):
 
     return wf_opts
 
-def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options=None, http_port=80):
+def submit(wdlPath, inputPath, port, wf_opts, label, dependencies=None, http_port=80):
 
     print(f'submitting {wdlPath}')
     ## force labeling:
@@ -65,7 +65,9 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         for l in wd:
             l=l.strip()
             if l.startswith("workflow"):
-                workflowname=re.search('^workflow[ ]+([A-Za-z]+)',l).group(1)
+                match = re.search('^workflow[ ]+([A-Za-z]+)',l)
+                if match:
+                    workflowname = match.group(1)
                 break
 
     user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
@@ -392,7 +394,7 @@ def print_top_level_failure( metadat ):
     for f in metadat["failures"]:
         print_all_failures(f)
 
-def get_status(id, port,timeout=60, nocalls=False, minkeys=False,http_port=80):
+def get_status(id, port,timeout=60, http_port=80):
     workflowID = id
     cmd1 = f'curl -X GET \"http://localhost:{http_port}/api/workflows/v1/{workflowID}/status\" -H \"accept: application/json\" --socks5 localhost:{port}  '
     print(cmd1)
@@ -425,7 +427,6 @@ def update_log(args,id,status):
     with open(args.workflow_log,'wt') as o:
         for line in new_lines:
             o.write('\t'.join(line) + '\n')
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cromwell commands from command line")
@@ -508,7 +509,7 @@ if __name__ == "__main__":
             print(args.id)
 
         if args.running:
-            status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout,nocalls=args.no_calls, minkeys=args.minkeys,http_port=args.http_port)
+            status = get_status(args.id, port=args.port, timeout=args.cromwell_timeout, http_port=args.http_port)
             if status not in ['fail', 'error']:
                 args.summary = args.failed_jobs = False
                 update_log(args,args.id,status)
@@ -543,12 +544,11 @@ if __name__ == "__main__":
                     print("print top level failures")
                     print_top_level_failure(metadat)
 
-
     elif args.command == "submit":
         wf_opts = process_inputs(args)
         print(args.wdl,args.inputs,args.label,wf_opts)
         submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,wf_opts = wf_opts,label=args.label,
-        dependencies= args.deps, options=args.options, http_port=args.http_port)
+        dependencies= args.deps, http_port=args.http_port)
 
     elif args.command == "connect":
         print("Trying to connect to server...")
