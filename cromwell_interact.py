@@ -47,10 +47,18 @@ def process_inputs(args):
             dependency_files = [line.split('"')[1].strip() for line in wdl_lines if re.search('^import ".*.wdl"', line)]
 
         if dependency_files:
+            # Get the directory of the main WDL file to resolve relative imports
+            wdl_dir = os.path.dirname(args.wdl)
             dependency_zip = args.wdl.replace('.wdl', '.zip')
             with zipfile.ZipFile(dependency_zip, 'w') as zip_file:
                 for file in dependency_files:
-                    zip_file.write(file)
+                    # Resolve dependency path relative to the WDL file's directory
+                    dep_path = os.path.join(wdl_dir, file) if wdl_dir else file
+                    if os.path.isfile(dep_path):
+                        # Write with arcname to preserve just the filename in the zip
+                        zip_file.write(dep_path, arcname=file)
+                    else:
+                        raise Exception(f"Dependency file not found: {dep_path}")
             args.deps = dependency_zip
 
     return wf_opts
