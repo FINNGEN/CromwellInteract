@@ -553,6 +553,8 @@ if __name__ == "__main__":
                     print_top_level_failure(metadat)
 
     elif args.command == "submit":
+        if len(args.label) > 63:
+            raise ValueError("Workflow label (--label) length must be less than 64 characters.")
         wf_opts = process_inputs(args)
         print(args.wdl,args.inputs,args.label,wf_opts)
         submit(wdlPath=args.wdl, inputPath=args.inputs,port=args.port,wf_opts = wf_opts,label=args.label,
