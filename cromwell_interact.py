@@ -430,6 +430,7 @@ if __name__ == "__main__":
     parser_out = subparsers.add_parser('outfiles', aliases = ['outfiles'],help="Prints out content of elems under ")
     parser_out.add_argument("id",type= str,help="workflow id")
     parser_out.add_argument("-tag",type= str,help="what output tag to print out. If omitted, prints all.")
+    parser_out.add_argument("--detailed",action="store_true",help="write outputs in separate files under folder named WORKFLOW_ID_outputs")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
@@ -510,23 +511,38 @@ if __name__ == "__main__":
     elif args.command == "outfiles":
         metadat = get_outputs(args.id, port=args.port, timeout=60,http_port=args.http_port)
         tag = args.tag
-
-        def printfiles(lst):
-            
+        def flatten(lst):
+            output = []
             for l in lst:
                 if isinstance(l,list):
-                    printfiles(l)
+                    output.extend(flatten(l))
                 else:
-                    print(l)
-
-
+                    output.append(l)
+            return output
+        
         flist = metadat["outputs"]
-        if tag:
-            flist = flist[tag]
-            printfiles(flist)
+        if args.detailed:
+            
+            # make folder for outputs if does not exist yet
+            folder_name = f"{args.id}_outputs"
+            if not os.path.exists(folder_name):
+                os.mkdir(folder_name)
+            # for each output tag, create file and write contents there
+            for tag,contents in flist.items():
+                contents_flat = flatten(contents)
+                with open(os.path.join(folder_name,tag),"wt",encoding="utf-8") as of:
+                    for c in contents_flat:
+                        of.write(f"{c}\n")
         else:
-            for k in flist.keys():
-                printfiles(flist[k])
+            if tag:
+                flist = flatten(flist[tag])
+                for f in flist:
+                    print(f)
+            else:
+                for k in flist.keys():
+                    temp = flatten(flist[k])
+                    for f in temp:
+                        print(f)
 
 
 
