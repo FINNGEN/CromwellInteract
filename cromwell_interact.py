@@ -44,6 +44,16 @@ def process_inputs(args):
 
     return wf_opts
 
+def copy_to_clipboard(text):
+    # pbcopy (macOS), wl-copy (Wayland), xclip/xsel (X11): use the first one that works
+    for cmd in (['pbcopy'], ['wl-copy'], ['xclip', '-selection', 'clipboard'], ['xsel', '--clipboard', '--input']):
+        try:
+            if subprocess.run(cmd, input=text.encode('utf-8'), stderr=subprocess.DEVNULL).returncode == 0:
+                return
+        except FileNotFoundError:
+            continue
+    print("Could not copy job ID to clipboard (need pbcopy, wl-copy, xclip or xsel).")
+
 def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options=None, http_port=80):
 
     print(f'submitting {wdlPath}')
@@ -86,11 +96,8 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         raise Exception(f'Error in Cromwell request. Error:{resp["message"]}' )
     jobID = resp['id']
     print(jobID)
-    try:
-        subprocess.run(['xclip', '-selection', 'clipboard'], input=jobID.encode('utf-8'))
-    except FileNotFoundError:
-        print("Error: xclip command not found. Cannot copy to system clipboard.")
-        
+    copy_to_clipboard(jobID)
+
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     if not label:label = wdl_name
