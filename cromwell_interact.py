@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 from subprocess import Popen,PIPE,call,run
 import subprocess
-import shlex,os,argparse,datetime,json,pyperclip
+import shlex,os,argparse,datetime,json
 from utils import make_sure_path_exists
 from collections import defaultdict, Counter
 import re,sys,warnings
@@ -17,6 +17,14 @@ def process_inputs(args):
 
     if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
 
+    # fall back to google_inputs.json next to the wdl if no labels/options were given
+    if not args.google_labels and not args.options:
+        google_inputs = os.path.join(os.path.dirname(os.path.abspath(args.wdl)),'google_inputs.json')
+        if os.path.isfile(google_inputs):
+            print(f'using workflow options from {google_inputs}')
+            args.options = google_inputs
+        else:
+            raise Exception(f"You must pass --options or --google_labels, or place a google_inputs.json next to the wdl ({google_inputs})")
 
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
@@ -65,8 +73,6 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     if dependencies is not None:
         cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
 
-
-
     stringCMD = shlex.split(cmd)
 
     proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -80,9 +86,11 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         raise Exception(f'Error in Cromwell request. Error:{resp["message"]}' )
     jobID = resp['id']
     print(jobID)
-    if pyperclip.is_available():
-    	pyperclip.copy(jobID)
-
+    try:
+        subprocess.run(['xclip', '-selection', 'clipboard'], input=jobID.encode('utf-8'))
+    except FileNotFoundError:
+        print("Error: xclip command not found. Cannot copy to system clipboard.")
+        
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
     if not label:label = wdl_name
@@ -409,8 +417,8 @@ if __name__ == "__main__":
     parser_submit.add_argument('--monitor',type=str,default="gs://fg-analysis-public-resources/monitor_script.sh",help="give custom monitoring script path in cloud")
     parser_submit.add_argument('--disable-monitoring',action="store_true",help='Disable task monitoring')
 
-    label_options = parser_submit.add_mutually_exclusive_group(required=True)
-    label_options.add_argument('--options', type=str, help='Workflow option json')
+    label_options = parser_submit.add_mutually_exclusive_group()
+    label_options.add_argument('--options', type=str, help='Workflow option json. Defaults to google_inputs.json in the wdl directory if present.')
     label_options.add_argument('--google_labels', '--l', type=str, help='Labels (comma separated key=value list) of the workflow for google. Must contain product at minimum.')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
@@ -495,8 +503,18 @@ if __name__ == "__main__":
         dependencies= args.deps, options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
+        portcheck = subprocess.run(['ss', '-tln'], stdout=subprocess.PIPE, encoding="ASCII")
+        if f':{args.port} ' in portcheck.stdout:
+            print(f"Port {args.port} is already in use — a tunnel may already be up, "
+                  f"or a stale one needs killing (check `ss -tlnp | grep :{args.port}`).\n"
+                  f"To tell which: try `curl --socks5 localhost:{args.port} http://localhost/api/workflows/v1/query` — "
+                  f"a quick response means the tunnel is alive and you can reuse it as-is; a hang followed by "
+                  f"'proxy closed connection' means it's dead. If it's dead, find and kill it with "
+                  f"`ps aux | grep -- '-D.*localhost:{args.port}'` then `kill <pid>`, and re-run this connect command.")
+            sys.exit(1)
         print("Trying to connect to server...")
-        subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"',
+        subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} '
+                    f'-o "ExitOnForwardFailure yes" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3"',
                     shell=True, encoding="ASCII")
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
