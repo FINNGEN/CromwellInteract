@@ -4,7 +4,7 @@ import subprocess
 import shlex,os,argparse,datetime,json
 from utils import make_sure_path_exists
 from collections import defaultdict, Counter
-import re,sys,warnings
+import re,sys,warnings,socket
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
@@ -503,10 +503,14 @@ if __name__ == "__main__":
         dependencies= args.deps, options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
-        portcheck = subprocess.run(['ss', '-tln'], stdout=subprocess.PIPE, encoding="ASCII")
-        if f':{args.port} ' in portcheck.stdout:
+        try:
+            socket.create_connection(('localhost', args.port), timeout=1).close()
+            port_in_use = True
+        except OSError:
+            port_in_use = False
+        if port_in_use:
             print(f"Port {args.port} is already in use — a tunnel may already be up, "
-                  f"or a stale one needs killing (check `ss -tlnp | grep :{args.port}`).\n"
+                  f"or a stale one needs killing (check `lsof -nP -iTCP:{args.port} -sTCP:LISTEN`).\n"
                   f"To tell which: try `curl --socks5 localhost:{args.port} http://localhost/api/workflows/v1/query` — "
                   f"a quick response means the tunnel is alive and you can reuse it as-is; a hang followed by "
                   f"'proxy closed connection' means it's dead. If it's dead, find and kill it with "
