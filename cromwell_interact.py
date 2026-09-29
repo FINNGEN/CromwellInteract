@@ -1,10 +1,10 @@
 #! /usr/bin/env python3
 from subprocess import Popen,PIPE,call,run
 import subprocess
-import shlex,os,argparse,datetime,json,pyperclip
+import shlex,os,argparse,datetime,json
 from utils import make_sure_path_exists
 from collections import defaultdict, Counter
-import re,sys,warnings
+import re,sys,warnings,socket
 rootPath = '/'.join(os.path.realpath(__file__).split('/')[:-1]) + '/'
 tmpPath = os.path.join(rootPath,'tmp')
 make_sure_path_exists(tmpPath)
@@ -17,6 +17,14 @@ def process_inputs(args):
 
     if not args.inputs: args.inputs = args.wdl.replace('.wdl','.json')
 
+    # fall back to google_inputs.json next to the wdl if no labels/options were given
+    if not args.google_labels and not args.options:
+        google_inputs = os.path.join(os.path.dirname(os.path.abspath(args.wdl)),'google_inputs.json')
+        if os.path.isfile(google_inputs):
+            print(f'using workflow options from {google_inputs}')
+            args.options = google_inputs
+        else:
+            raise Exception(f"You must pass --options or --google_labels, or place a google_inputs.json next to the wdl ({google_inputs})")
 
     # labels and options are now mutually exclusive by structure
     if args.google_labels:
@@ -35,6 +43,16 @@ def process_inputs(args):
         raise Exception("You must add product google label with --l product=value or --options json")
 
     return wf_opts
+
+def copy_to_clipboard(text):
+    # pbcopy (macOS), wl-copy (Wayland), xclip/xsel (X11): use the first one that works
+    for cmd in (['pbcopy'], ['wl-copy'], ['xclip', '-selection', 'clipboard'], ['xsel', '--clipboard', '--input']):
+        try:
+            if subprocess.run(cmd, input=text.encode('utf-8'), stderr=subprocess.DEVNULL).returncode == 0:
+                return
+        except FileNotFoundError:
+            continue
+    print("Could not copy job ID to clipboard (need pbcopy, wl-copy, xclip or xsel).")
 
 def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options=None, http_port=80):
 
@@ -65,8 +83,6 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
     if dependencies is not None:
         cmd = f'{cmd} -F \"workflowDependencies=@{dependencies};type=application/zip"'
 
-
-
     stringCMD = shlex.split(cmd)
 
     proc = Popen(stringCMD, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -80,8 +96,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
         raise Exception(f'Error in Cromwell request. Error:{resp["message"]}' )
     jobID = resp['id']
     print(jobID)
-    if pyperclip.is_available():
-    	pyperclip.copy(jobID)
+    copy_to_clipboard(jobID)
 
     current_date = datetime.datetime.today().strftime('%Y-%m-%d')
     wdl_name = os.path.basename(wdlPath).split('.wdl')[0]
@@ -409,8 +424,8 @@ if __name__ == "__main__":
     parser_submit.add_argument('--monitor',type=str,default="gs://fg-analysis-public-resources/monitor_script.sh",help="give custom monitoring script path in cloud")
     parser_submit.add_argument('--disable-monitoring',action="store_true",help='Disable task monitoring')
 
-    label_options = parser_submit.add_mutually_exclusive_group(required=True)
-    label_options.add_argument('--options', type=str, help='Workflow option json')
+    label_options = parser_submit.add_mutually_exclusive_group()
+    label_options.add_argument('--options', type=str, help='Workflow option json. Defaults to google_inputs.json in the wdl directory if present.')
     label_options.add_argument('--google_labels', '--l', type=str, help='Labels (comma separated key=value list) of the workflow for google. Must contain product at minimum.')
     # metadata parser
     parser_meta = subparsers.add_parser('meta', aliases = ['metadata'],help="Requests metadata and summaries of workflows")
@@ -498,6 +513,19 @@ if __name__ == "__main__":
         dependencies= args.deps, options=args.options, http_port=args.http_port)
 
     elif args.command == "connect":
+        try:
+            socket.create_connection(('localhost', args.port), timeout=1).close()
+            port_in_use = True
+        except OSError:
+            port_in_use = False
+        if port_in_use:
+            print(f"Port {args.port} is already in use — a tunnel may already be up, "
+                  f"or a stale one needs killing (check `lsof -nP -iTCP:{args.port} -sTCP:LISTEN`).\n"
+                  f"To tell which: try `curl --socks5 localhost:{args.port} http://localhost/api/workflows/v1/query` — "
+                  f"a quick response means the tunnel is alive and you can reuse it as-is; a hang followed by "
+                  f"'proxy closed connection' means it's dead. If it's dead, find and kill it with "
+                  f"`ps aux | grep -- '-D.*localhost:{args.port}'` then `kill <pid>`, and re-run this connect command.")
+            sys.exit(1)
         print("Trying to connect to server...")
         connect_cmd = f'gcloud compute ssh {args.server}'
         if args.project:
