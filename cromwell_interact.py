@@ -69,7 +69,7 @@ def submit(wdlPath,inputPath,port,wf_opts,label = '', dependencies=None, options
 
     user = subprocess.run('gcloud auth list --filter=status:ACTIVE --format="value(account)"', shell=True, stdout=subprocess.PIPE).stdout.decode().strip()
     wf_opts["google_labels"]["cromwell-submitter"]=user.replace("@","-at-").replace(".","-dot-")[:63].rstrip("-")
-    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname
+    wf_opts["google_labels"]["cromwell-workflow-name"]=workflowname.lower()
 
 
     cmd = (f'curl -X POST http://localhost:{http_port}/api/workflows/v1 -H "accept: application/json" -H "Content-Type: multipart/form-data" '
@@ -445,12 +445,15 @@ if __name__ == "__main__":
     parser_out = subparsers.add_parser('outfiles', aliases = ['outfiles'],help="Prints out content of elems under ")
     parser_out.add_argument("id",type= str,help="workflow id")
     parser_out.add_argument("-tag",type= str,help="what output tag to print out. If omitted, prints all.")
+    parser_out.add_argument("--detailed",action="store_true",help="write outputs in separate files under folder named WORKFLOW_ID_outputs")
     # abort parser
     parser_abort = subparsers.add_parser('abort' )
     parser_abort.add_argument("id", type= str,help="workflow id")
 
-    parser_abort = subparsers.add_parser('connect' )
-    parser_abort.add_argument("server", type=str,help="Cromwell server name")
+    parser_connect = subparsers.add_parser('connect' )
+    parser_connect.add_argument("server", type=str,help="Cromwell server name")
+    parser_connect.add_argument("--project", type=str, help="GCP project name")
+    parser_connect.add_argument("--zone", type=str, help="Server zone")
 
     parser_log = subparsers.add_parser('log', help='prints the log')
     parser_log.add_argument("--n", type= int,default =10,help="number of latest jobs to print")
@@ -524,31 +527,50 @@ if __name__ == "__main__":
                   f"`ps aux | grep -- '-D.*localhost:{args.port}'` then `kill <pid>`, and re-run this connect command.")
             sys.exit(1)
         print("Trying to connect to server...")
-        subprocess.check_call(f'gcloud compute ssh {args.server} -- -f -n -N -D localhost:{args.port} '
-                    f'-o "ExitOnForwardFailure yes" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3"',
-                    shell=True, encoding="ASCII")
+        connect_cmd = f'gcloud compute ssh {args.server}'
+        if args.project:
+            connect_cmd += f' --project={args.project}'
+        if args.zone:
+            connect_cmd += f' --zone={args.zone}'
+        connect_cmd += f' -- -f -n -N -D localhost:{args.port} -o "ExitOnForwardFailure yes"'
+        subprocess.check_call(connect_cmd, shell=True, encoding="ASCII")
         print(f'Connection opened to {args.server} via localhost:{args.port}')
 
     elif args.command == "outfiles":
         metadat = get_outputs(args.id, port=args.port, timeout=60,http_port=args.http_port)
         tag = args.tag
-
-        def printfiles(lst):
-            
+        def flatten(lst):
+            output = []
             for l in lst:
                 if isinstance(l,list):
-                    printfiles(l)
+                    output.extend(flatten(l))
                 else:
-                    print(l)
-
-
+                    output.append(l)
+            return output
+        
         flist = metadat["outputs"]
-        if tag:
-            flist = flist[tag]
-            printfiles(flist)
+        if args.detailed:
+            
+            # make folder for outputs if does not exist yet
+            folder_name = f"{args.id}_outputs"
+            if not os.path.exists(folder_name):
+                os.mkdir(folder_name)
+            # for each output tag, create file and write contents there
+            for tag,contents in flist.items():
+                contents_flat = flatten(contents)
+                with open(os.path.join(folder_name,tag),"wt",encoding="utf-8") as of:
+                    for c in contents_flat:
+                        of.write(f"{c}\n")
         else:
-            for k in flist.keys():
-                printfiles(flist[k])
+            if tag:
+                flist = flatten(flist[tag])
+                for f in flist:
+                    print(f)
+            else:
+                for k in flist.keys():
+                    temp = flatten(flist[k])
+                    for f in temp:
+                        print(f)
 
 
 
